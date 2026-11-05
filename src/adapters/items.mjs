@@ -1,11 +1,12 @@
 /** Native library/item resolution and commit-time bibliographic eligibility checks. */
 import { ContractError, check } from '../domain/values.mjs';
 import { validateItemRef } from '../domain/graph-contract.mjs';
+import { createEndpointResolver } from './resolve-endpoints.mjs';
 
 /**
  * Bind native Zotero item operations without writing reference fields or Related links.
  * @param {object} Zotero Actual supported native platform object.
- * @returns {object} Scope/ref/describe/assertWritable/navigate gateway.
+ * @returns {object} Scope/ref/resolve/describe/assertWritable/navigate gateway; resolve is a read-only lifecycle observation.
  */
 export function createItemGateway(Zotero) {
   /** Resolve the actual containing library. @param {string} scope Portable scope. @returns {object} Native library. */
@@ -62,5 +63,6 @@ export function createItemGateway(Zotero) {
     await window.ZoteroPane.selectItem(item.id);
   }
 
-  return { library, scope, ref, describe, assertWritable, navigate };
+  const resolve = createEndpointResolver({ Zotero, library });
+  return { library, scope, ref, resolve, describe, assertWritable, navigate };
 }
