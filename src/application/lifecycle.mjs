@@ -30,6 +30,8 @@ function requireReady(report) {
     { key: cluster.key, field: conflict.field, contributors: [first, different] });
 }
 
+export { inspect as inspectObserved, requireReady as requireReadyProjection };
+
 /** Validate new/moved explicit triples against actual native endpoints while preserving existing merge collisions. @param {object} before Valid current authority. @param {object} after Valid proposal. @param {object} delta Authority assertion delta. @param {object[]} rows Complete union observations. @returns {void} */
 function validateWrites(before, after, delta, rows) {
   const observed = new Map(rows.map(row => [canonicalJSON(row.original), row]));

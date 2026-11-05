@@ -86,6 +86,16 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('transfer:')) {
+    const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-transfer-tests', Services.io.newURI(controllerRootURI));
+    if (syncJob.action.startsWith('transfer:review')) {
+      const { transferReview } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-review.sys.mjs');
+      return transferReview(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    const { transferIdentity } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-identity.sys.mjs');
+    return transferIdentity(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('reconcile:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);
