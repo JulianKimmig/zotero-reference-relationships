@@ -1,0 +1,12 @@
+{
+  "manifest_version": 2,
+  "name": "Reference Relationships Isolated Test Controller",
+  "version": "0.1.0",
+  "applications": {
+    "zotero": {
+      "id": "rr-test-controller@example.test",
+      "strict_min_version": "10.0",
+      "strict_max_version": "10.*"
+    }
+  }
+}

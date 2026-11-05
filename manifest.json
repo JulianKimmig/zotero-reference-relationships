@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "Reference Relationships",
+  "version": "0.1.0",
+  "description": "Development scaffold for typed Zotero reference relationships.",
+  "applications": {
+    "zotero": {
+      "id": "reference-relationships@zotero-plugins.local",
+      "strict_min_version": "10.0.7",
+      "strict_max_version": "10.0.7"
+    }
+  }
+}
