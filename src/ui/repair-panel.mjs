@@ -37,7 +37,8 @@ export class RepairPanel {
     if (this.disposed || generation !== this.generation) return;
     check(report.revision === state.head, 'Relationship data changed; reopen original relationships', 'conflict');
     if (this.disposed || generation !== this.generation) return;
-    this.message.textContent = report.state === 'conflict' ? t('conflicted-before') : t('original-keys');
+    this.message.textContent = report.state === 'endpoint-conflict' ? t('unresolved-before')
+      : report.state === 'conflict' ? t('conflicted-before') : t('original-keys');
     this.roots = state.snapshot.assertions.filter(root => this.ids === null || this.ids.includes(root.id)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     if (this.ids !== null) check(this.roots.length === this.ids.length, 'Original contribution is no longer present', 'conflict');
     this.diagnostics = report.diagnostics; await this.page();

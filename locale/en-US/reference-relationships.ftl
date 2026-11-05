@@ -69,3 +69,4 @@ reference-relationships-rule-no-originals = No original relationships in this se
 reference-relationships-rule-original-keys = Original reference keys and metadata remain stored through merges, undo and endpoint deletion. Editing or removing one contribution preserves the others.
 reference-relationships-rule-choose-contribution = Choose original contribution…
 reference-relationships-rule-conflict-field = Conflicting field
+reference-relationships-rule-unresolved-before = Native merge aliases are unresolved. The complete current graph is unavailable; all original reference keys and values remain below. Choose an explicit repair before saving.

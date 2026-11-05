@@ -1,12 +1,12 @@
 /** Native library/item resolution and commit-time bibliographic eligibility checks. */
 import { ContractError, check } from '../domain/values.mjs';
 import { validateItemRef } from '../domain/graph-contract.mjs';
-import { createEndpointResolver } from './resolve-endpoints.mjs';
+import { createEndpointResolver, createEndpointInspector } from './resolve-endpoints.mjs';
 
 /**
  * Bind native Zotero item operations without writing reference fields or Related links.
  * @param {object} Zotero Actual supported native platform object.
- * @returns {object} Scope/ref/resolve/describe/assertWritable/navigate gateway; resolve is a read-only lifecycle observation.
+ * @returns {object} Scope/ref/resolve/inspect/describe/assertWritable/navigate gateway; inspect preserves unresolved alias states without selecting targets.
  */
 export function createItemGateway(Zotero) {
   /** Resolve the actual containing library. @param {string} scope Portable scope. @returns {object} Native library. */
@@ -33,7 +33,7 @@ export function createItemGateway(Zotero) {
 
   /** Describe actual endpoint availability and editability without inventing a replacement. @param {object} input ItemRef. @returns {Promise<object>} Detached label/status. */
   async function describe(input) {
-    const result = await resolve(input);
+    const result = await inspect(input);
     return { ref: result.original, title: result.title, status: result.status, editable: result.editable };
   }
 
@@ -59,5 +59,6 @@ export function createItemGateway(Zotero) {
   }
 
   const resolve = createEndpointResolver({ Zotero, library });
-  return { library, scope, ref, resolve, describe, assertWritable, navigate };
+  const inspect = createEndpointInspector({ Zotero, library });
+  return { library, scope, ref, resolve, inspect, describe, assertWritable, navigate };
 }

@@ -1,7 +1,7 @@
 /** Native-state-bound projected reads and complete conflict-aware change review without authority rewrites. */
 import { ContractError, check, jsonCopy } from '../domain/values.mjs';
 import { validateGraph, edgeKey } from '../domain/graph-contract.mjs';
-import { inspectProjection } from '../domain/evaluate.mjs';
+import { inspectEndpoints } from '../domain/inspect-endpoints.mjs';
 import { canonicalJSON } from '../storage/canonical.mjs';
 import { entityDelta } from './changes.mjs';
 
@@ -15,13 +15,15 @@ function references(snapshots) {
 /** Inspect a complete graph using only its own original endpoint observations. @param {object} snapshot Valid graph. @param {object[]} rows Union of before/after native observations. @returns {object} Complete projection inspection. */
 function inspect(snapshot, rows) {
   const keys = new Set(references([snapshot]).map(ref => canonicalJSON(ref)));
-  return inspectProjection(snapshot, rows.filter(row => keys.has(canonicalJSON(row.original)))
+  return inspectEndpoints(snapshot, rows.filter(row => keys.has(canonicalJSON(row.original)))
     .map(({ original, resolved, status }) => ({ original, resolved, status })));
 }
 
 /** Reject aggregate ambiguity after a proposal with deterministic original contributor witnesses. @param {object} report Complete after inspection. @returns {void} */
 function requireReady(report) {
   if (report.state === 'ready') return;
+  if (report.state === 'endpoint-conflict') throw new ContractError('endpoint',
+    'Native aliases remain unresolved; explicitly repair the affected original relationships', { diagnostics: report.diagnostics });
   const cluster = report.clusters.find(cluster => cluster.conflicts.length > 0), conflict = cluster.conflicts[0];
   const first = conflict.contributors[0], different = conflict.contributors.find(value => value.value !== first.value);
   throw new ContractError('conflict', `Conflicting relationship metadata for ${conflict.field}`,
@@ -55,13 +57,13 @@ function validateWrites(before, after, delta, rows) {
 /** Bind native observations and complete projections to the existing guarded application transaction. */
 export class LifecycleProjection {
   /** Require actual gateway resolution and real SHA-256 composition. @param {object} gateway Native item gateway. @param {Function} digest Async SHA-256 over UTF-8. */
-  constructor(gateway, digest) { check(typeof gateway.resolve === 'function' && typeof digest === 'function', 'Explicit lifecycle dependencies required'); this.gateway = gateway; this.digest = digest; }
+  constructor(gateway, digest) { check(typeof gateway.inspect === 'function' && typeof digest === 'function', 'Explicit lifecycle dependencies required'); this.gateway = gateway; this.digest = digest; }
 
   /** Observe all semantic endpoint facts without storing titles or native numeric IDs. @param {object[]} snapshots Current/proposed authority. @returns {Promise<object>} Detached {rows,endpointRevision}. */
   async observe(snapshots) {
     const rows = [];
     for (const ref of references(snapshots)) {
-      const { original, resolved, status, editable } = await this.gateway.resolve(ref);
+      const { original, resolved, status, editable } = await this.gateway.inspect(ref);
       check(typeof editable === 'boolean', 'Native endpoint permission must be explicit');
       rows.push({ original, resolved, status, editable });
     }

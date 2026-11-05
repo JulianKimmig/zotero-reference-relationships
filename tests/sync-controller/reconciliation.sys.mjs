@@ -12,6 +12,10 @@ async function alias(Zotero, subject, uri) {
 
 /** Run one real native lifecycle foundation phase; application/UI integration has separate remaining gates. @param {object} job Phase/artifact/saved keys. @param {object} api Actual platform. @returns {Promise<object>} Verified module behavior. */
 export async function reconciliation(job, api) {
+  if (job.action.startsWith('reconcile:alias-ui')) {
+    const { reconciliationAliasUI } = await import('./reconciliation-alias-ui.sys.mjs');
+    return reconciliationAliasUI(job, api);
+  }
   if (job.action.startsWith('reconcile:repair-ui')) {
     const { reconciliationRepairUI } = await import('./reconciliation-repair-ui.sys.mjs');
     return reconciliationRepairUI(job, api);
@@ -100,10 +104,12 @@ export async function reconciliation(job, api) {
   await alias(Zotero, first, uri); await alias(Zotero, second, uri);
   const ambiguous = await production.gateway.resolve(goneRef);
   check(ambiguous.status === 'ambiguous' && ambiguous.resolved === null && !ambiguous.editable, 'Ambiguous native aliases silently chose a survivor');
+  check((await production.gateway.inspect(goneRef)).status === 'ambiguous', 'Read-only inspection lost ambiguity');
   const cycleA = await book(Zotero, `${job.marker} cyclic original`), cycleB = await book(Zotero, `${job.marker} cyclic alias`);
   cycleA.deleted = true; cycleB.deleted = true; await cycleA.saveTx(); await cycleB.saveTx();
   await alias(Zotero, cycleA, Zotero.URI.getItemURI(cycleB)); await alias(Zotero, cycleB, Zotero.URI.getItemURI(cycleA));
   await rejects(() => production.gateway.resolve(ref(cycleA)), 'endpoint');
+  check((await production.gateway.inspect(ref(cycleA))).status === 'cyclic', 'Read-only inspection lost the native cycle');
   const chain = [];
   for (let index = 0; index < 66; index++) {
     const item = await book(Zotero, `${job.marker} adversarial alias chain ${index}`);
@@ -112,6 +118,7 @@ export async function reconciliation(job, api) {
   }
   for (let index = 1; index < chain.length; index++) await alias(Zotero, chain[index], Zotero.URI.getItemURI(chain[index - 1]));
   await rejects(() => production.gateway.resolve(ref(chain[0])), 'limit');
+  check((await production.gateway.inspect(ref(chain[0]))).status === 'alias-limit', 'Read-only inspection hid the alias work bound');
   await rejects(() => production.gateway.resolve({ library: 'group:99999999999999', key: a.key }), 'endpoint');
   await preserved(api, before, count);
   return { before, count, a: a.key, b: b.key, c: c.key, d: d.key, nativeMergeUndoRedo: true,
