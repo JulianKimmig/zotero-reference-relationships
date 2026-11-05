@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { buildProject } from '../scripts/build.mjs';
 
-/** Create an isolated package input; @returns {Promise<string>} fixture root. */
-async function fixture() {
+/** Create an isolated package input. @param {boolean} withLocale Include required Fluent resources. @returns {Promise<string>} Fixture root. */
+async function fixture(withLocale = true) {
   const root = await mkdtemp(join(tmpdir(), 'rr-package-test-'));
   await mkdir(join(root, 'src'));
   await writeFile(join(root, 'manifest.json'), JSON.stringify({
@@ -20,21 +20,37 @@ async function fixture() {
   }));
   await writeFile(join(root, 'bootstrap.js'), '/** Fixture bootstrap. */\n');
   await writeFile(join(root, 'src', 'runtime.js'), '/** Fixture runtime. */\n');
+  if (withLocale) {
+    await mkdir(join(root, 'locale', 'en-US'), { recursive: true });
+    await writeFile(join(root, 'locale', 'en-US', 'reference-relationships.ftl'), '# Fixture strings.\nfixture-label = Relationships\n');
+  }
   return root;
 }
 
-test('packages actual bytes with only manifest, bootstrap and production src', async () => {
+test('packages actual bytes with only manifest, bootstrap, production src and Fluent resources', async () => {
   const root = await fixture();
   await mkdir(join(root, 'tests'));
   await writeFile(join(root, 'tests', 'controller.js'), 'private controller');
   await writeFile(join(root, 'prefs.js'), 'private preference');
   const output = join(root, 'release.xpi');
   assert.equal(await buildProject(root, output), output);
-  const entries = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8' })
-    .trim().split('\n').filter(name => !name.endsWith('/')).sort();
-  assert.deepEqual(entries, ['bootstrap.js', 'manifest.json', 'src/runtime.js']);
+  const allEntries = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8' }).trim().split('\n');
+  const entries = allEntries.filter(name => !name.endsWith('/')).sort();
+  assert.deepEqual(entries, ['bootstrap.js', 'locale/en-US/reference-relationships.ftl', 'manifest.json', 'src/runtime.js']);
+  assert.ok(allEntries.includes('locale/') && allEntries.includes('locale/en-US/'), 'Native locale discovery requires directory entries');
   assert.equal(execFileSync('unzip', ['-p', output, 'src/runtime.js'], { encoding: 'utf8' }),
     await readFile(join(root, 'src', 'runtime.js'), 'utf8'));
+});
+
+test('missing localization resources fails instead of shipping an unlabeled native section', async () => {
+  const root = await fixture(false);
+  await assert.rejects(buildProject(root, join(root, 'release.xpi')), /locale|ENOENT/);
+});
+
+test('rejects a localization directory symlink outside the production boundary', async () => {
+  const root = await fixture(false);
+  await symlink('/etc', join(root, 'locale'));
+  await assert.rejects(buildProject(root, join(root, 'release.xpi')), /symbolic|symlink/i);
 });
 
 test('missing manifest fails before producing an artifact', async () => {

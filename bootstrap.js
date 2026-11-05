@@ -1,6 +1,7 @@
-/** Zotero lifecycle entrypoints; graph behavior belongs to later verified tasks. */
-/* global Zotero, Services */
+/** Zotero lifecycle entrypoints with one isolated module generation and shared native application. */
+/* global Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder */
 var relationshipRuntime;
+var relationshipResource;
 
 /**
  * Create the shared service and register existing main windows.
@@ -13,7 +14,12 @@ function startup({ id, version, rootURI }) {
   }
   const scope = {};
   Services.scriptloader.loadSubScript(rootURI + 'src/runtime/lifecycle.js', scope);
-  relationshipRuntime = new scope.RelationshipRuntime({ id, version });
+  const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
+  relationshipResource = `rr-${Services.uuid.generateUUID().toString().replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
+  handler.setSubstitution(relationshipResource, Services.io.newURI(rootURI));
+  const { createPlugin } = ChromeUtils.importESModule(`resource://${relationshipResource}/src/runtime/plugin.mjs`);
+  const controller = createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncoder });
+  relationshipRuntime = new scope.RelationshipRuntime({ id, version, controller });
   for (const window of Zotero.getMainWindows()) {
     relationshipRuntime.addWindow(window);
   }
@@ -51,4 +57,6 @@ function shutdown() {
   }
   delete Zotero.ReferenceRelationships;
   relationshipRuntime = undefined;
+  const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
+  handler.setSubstitution(relationshipResource, null); relationshipResource = undefined;
 }

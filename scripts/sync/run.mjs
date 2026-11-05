@@ -43,7 +43,7 @@ async function requireClosed(profile) {
 }
 
 /** Wait for the controlled process and all output to close. @param {object} child Owned process. @returns {Promise<void>} */
-function awaitExit(child) {
+export function awaitExit(child) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       try { process.kill(-child.pid, 'SIGKILL'); }

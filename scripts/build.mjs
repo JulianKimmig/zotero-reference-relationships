@@ -14,7 +14,7 @@ async function collect(root, path) {
   if (info.isSymbolicLink()) throw new Error(`Refusing symbolic link: ${path}`);
   if (info.isFile()) return [path];
   if (!info.isDirectory()) throw new Error(`Not a regular package input: ${path}`);
-  const entries = [];
+  const entries = [`${path}/`];
   for (const name of (await readdir(join(root, path))).sort()) {
     entries.push(...await collect(root, join(path, name)));
   }
@@ -24,7 +24,7 @@ async function collect(root, path) {
 /** Build a new XPI without overwriting artifacts. @param {string} root @param {string} output @returns {Promise<string>} absolute artifact path. */
 export async function buildProject(root, output) {
   const files = [];
-  for (const path of ['manifest.json', 'bootstrap.js', 'src']) files.push(...await collect(root, path));
+  for (const path of ['manifest.json', 'bootstrap.js', 'src', 'locale']) files.push(...await collect(root, path));
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
   if (!manifest.applications?.zotero?.id || !manifest.version) throw new Error('Manifest needs Zotero id and version');
   if (!manifest.applications.zotero.update_url) throw new Error('Manifest needs applications.zotero.update_url');

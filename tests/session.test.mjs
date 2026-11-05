@@ -1,6 +1,7 @@
 /** Tests of real disposable-profile provisioning and integration result validation. */
 import assert from 'node:assert/strict';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import test from 'node:test';
 import { createSession, launchArguments, validateResult } from '../scripts/session.mjs';
@@ -32,6 +33,20 @@ test('launches native Zotero under Xvfb with explicit profile AND datadir', asyn
   assert.equal(args[args.indexOf('-profile') + 1], session.profile);
   assert.equal(args[args.indexOf('-datadir') + 1], session.data);
   assert.ok(args.includes('-no-remote'));
+});
+
+test('provisions the explicitly supplied controller and its actual addon identity', async () => {
+  const template = await mkdtemp(join(tmpdir(), 'rr-controller-input-'));
+  await writeFile(join(template, 'manifest.json'), JSON.stringify({ applications: { zotero: { id: 'custom-controller@example.test' } } }));
+  await writeFile(join(template, 'bootstrap.js'), '/** Controlled fixture bytes. */\n');
+  const session = await createSession('/tmp/plugin.xpi', 'fixture@example.test', '0.1.0', 'https://example.test/updates.json', template);
+  const installed = await readFile(join(session.profile, 'extensions', 'custom-controller@example.test'), 'utf8');
+  assert.equal(await readFile(join(installed, 'bootstrap.js'), 'utf8'), '/** Controlled fixture bytes. */\n');
+});
+
+test('a missing explicit controller fails instead of selecting the default controller', async () => {
+  await assert.rejects(createSession('/tmp/plugin.xpi', 'fixture@example.test', '0.1.0',
+    'https://example.test/updates.json', '/tmp/rr-controller-does-not-exist'), /ENOENT/);
 });
 
 test('requires an explicit HTTPS update manifest before provisioning a session', async () => {

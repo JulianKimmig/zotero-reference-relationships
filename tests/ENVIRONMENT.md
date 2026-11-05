@@ -14,6 +14,7 @@ ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero npm r
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero npm run test:sync -- /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/feasibility.mjs /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/publication.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/ui.mjs /absolute/test-config.json
 ```
 
 Build creates a fresh production-only XPI in /tmp; it refuses overwriting an existing output and rejects missing/non-HTTPS update URLs. The real configured endpoint is https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json, published manually by the user. No agent push is part of this workflow.
@@ -28,13 +29,22 @@ Required checks: isolation, updates-empty, startup, disable, reenable, window-op
 
 Earlier native probes established that missing update_url prevents installation and data URLs are disabled by native security. A real late-unload callback after app shutdown reproduced a relationshipRuntime TypeError; the regression rejected the actual captured log before the idempotent source fix. Final run has no such error.
 
-The final native log still includes core-window/tag-selector shutdown diagnostics. Attribution and broader GUI quality remain to investigate before full product acceptance; passing scaffold checks do not certify the unfinished relationship editor, storage, sync or all GUI behavior. Parent execution evidence and task files own authoritative gate records.
+The final native log still includes core-window/tag-selector shutdown diagnostics. Attribution and broader GUI quality remain to investigate before full product acceptance; passing scaffold checks alone do not certify relationship editing, storage, sync or all GUI behavior. Parent execution evidence and task files own authoritative current gate records.
 
 ## Signed storage experiments
 
 The sync commands require three existing dedicated profiles: A1/A2 signed into one test account and B1 into another, both members of a writable group, plus a second group read-only for B. Configuration is a JSON object with `groups: {writable, restricted}` holding positive server group IDs and `clients: {a1, a2, b1}` holding distinct absolute `profile` and `data` paths. Close interactive clients before running. Keep `sync.autoSync` disabled. Commands create labeled synthetic notes in these test libraries; they never read authentication files. Each job restores original user.js bytes and removes only its own launch hooks. Evidence is retained privately in `/tmp`.
 
-The prerequisite checks actual cross-client arrival, changed values and native permission denial. Feasibility exercises the actual note editor, merge/Undo/Redo, standalone authority after endpoint erase, and restart retrieval. Publication stages incomplete generations and genuine offline forks, detects conflicts, resolves both heads, and forces a real transaction rollback using the restricted group. The pure model is shared unchanged by Node and native tests. These are bounded storage experiments; production graph persistence is a later task.
+The prerequisite checks actual cross-client arrival, changed values and native permission denial. Feasibility exercises the actual note editor, merge/Undo/Redo, standalone authority after endpoint erase, and restart retrieval. Publication stages incomplete generations and genuine offline forks, detects conflicts, resolves both heads, and forces a real transaction rollback using the restricted group. The pure model is shared unchanged by Node and native tests. These bounded experiments are distinct from the production repository conformance commands and evidence recorded in the parent system of record.
+
+The UI runner builds and hashes the production XPI, initializes a new anonymous
+profile without copying any existing profile or authentication, then exercises
+native menu/picker, preview/cancel, creation/editing/navigation, rapid selection,
+and restart/removal. A1 creates labeled restricted-group references; B1 syncs
+and verifies read-only UI and application rejection without authority changes.
+Existing signed personal relationship authority is preserved. Repeating this
+command creates a separate anonymous UI fixture; retain both result directories
+when validating the two-fixture journey requirement.
 
 Publication writes `progress.json` after each successful native job and `result.json` only at full completion. Resume an interrupted suite with `node scripts/sync/publication.mjs /absolute/test-config.json --resume /absolute/evidence-root` only with the same fixture semantics and controller revision. A process crash after a mutation is a failed job even if its private result says success: inspect it and verify its saved keys after a clean restart before recording completion; do not blindly replay the mutation. Missing dependencies stay pending, multiple complete heads stay conflict, and malformed or unknown envelopes fail explicitly.
 

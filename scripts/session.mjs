@@ -8,8 +8,8 @@ const controllerTemplate = fileURLToPath(new URL('../tests/controller/', import.
 export const requiredChecks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall', 'shutdown-enabled'];
 export const expectedZoteroVersion = '10.0.7';
 
-/** Create dedicated directories and a controller bound to a real endpoint. @param {string} xpi @param {string} id @param {string} version @param {string} updateURL actual HTTPS manifest. @returns {Promise<object>} session paths. */
-export async function createSession(xpi, id, version, updateURL) {
+/** Create dedicated directories and a controller bound to a real endpoint. @param {string} xpi @param {string} id @param {string} version @param {string} updateURL Actual HTTPS manifest. @param {string} template Explicit controller directory, defaulting to the scaffold controller. @returns {Promise<object>} Session paths. */
+export async function createSession(xpi, id, version, updateURL, template = controllerTemplate) {
   if (!updateURL || new URL(updateURL).protocol !== 'https:') throw new Error('A real HTTPS update manifest is required');
   const root = await mkdtemp(join(tmpdir(), 'reference-relationships-integration-'));
   const session = { root, profile: join(root, 'profile'), data: join(root, 'data'), result: join(root, 'result.json') };
@@ -17,13 +17,13 @@ export async function createSession(xpi, id, version, updateURL) {
   await mkdir(session.data);
   await mkdir(join(session.profile, 'extensions'));
   const controller = join(root, 'controller');
-  await cp(controllerTemplate, controller, { recursive: true });
+  await cp(template, controller, { recursive: true });
   const manifestPath = join(controller, 'manifest.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
   // Zotero requires this secure URL to load the controller; only production updates are checked.
   manifest.applications.zotero.update_url = updateURL;
   await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-  await writeFile(join(session.profile, 'extensions', 'rr-test-controller@example.test'), controller);
+  await writeFile(join(session.profile, 'extensions', manifest.applications.zotero.id), controller);
   const prefs = {
     'extensions.autoDisableScopes': 0,
     'extensions.enabledScopes': 15,

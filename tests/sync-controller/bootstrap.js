@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('ui:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-ui-tests', Services.io.newURI(controllerRootURI));
+    const { uiJourney } = ChromeUtils.importESModule('resource://rr-ui-tests/ui-journey.sys.mjs');
+    return uiJourney(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('storage:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);
