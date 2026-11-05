@@ -25,7 +25,10 @@ async function main() {
   const common = { xpi, groups: config.groups, marker: `RR alias repair ${randomUUID()}` };
   const repaired = await nativeJob(options, 'alias', { ...common, action: 'reconcile:alias-ui' });
   const restarted = await nativeJob(options, 'alias', { ...common, ...repaired, action: 'reconcile:alias-ui-restart' });
-  await writeFile(join(root, 'result.json'), JSON.stringify({ ok: true, xpi, sha256, repaired, restarted }, null, 2));
+  const bulk = await nativeJob(options, 'alias', { ...common, action: 'reconcile:bulk-ui' });
+  const edges = await nativeJob(options, 'alias', { ...common, action: 'reconcile:bulk-edges' });
+  const final = await nativeJob(options, 'alias', { ...common, ...repaired, ...edges, action: 'reconcile:alias-ui-final' });
+  await writeFile(join(root, 'result.json'), JSON.stringify({ ok: true, xpi, sha256, repaired, restarted, bulk, edges, final }, null, 2));
   console.log(JSON.stringify({ ok: true, root, sha256 }));
 }
 

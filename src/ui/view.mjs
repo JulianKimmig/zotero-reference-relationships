@@ -6,6 +6,7 @@ import { check } from '../domain/values.mjs';
 import { ruleLabels } from './rule-controls.mjs';
 import { provenance, describeContributors } from './provenance.mjs';
 import { RepairPanel } from './repair-panel.mjs';
+import { BulkRemovalEditor } from './bulk-removal.mjs';
 
 /** Own one native section's DOM and selection generation. */
 export class RelationshipView {
@@ -168,6 +169,13 @@ export class RelationshipView {
   openRepairs(ids) {
     if (this.editor) this.editor.dispose();
     const editor = new RepairPanel(this, ids); this.editor = editor; this.root.append(editor.root); editor.run(() => editor.load());
+  }
+
+  /** Open one atomic preview for explicitly selected original removals. @param {string[]} ids Selected original assertion IDs. @returns {void} */
+  openRemoval(ids) {
+    check(this.context.editable && ids.length > 0, 'Choose editable original relationships', 'permission');
+    if (this.editor) this.editor.dispose();
+    this.editor = new BulkRemovalEditor(this, ids); this.root.append(this.editor.root);
   }
 
   /** Explain actual current roots and rule versions, discarding responses after native selection/revision changes. @param {Element} row Owned relationship row. @param {object} edge Effective relationship. @returns {Promise<void>} */

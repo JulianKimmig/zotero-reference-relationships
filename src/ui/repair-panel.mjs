@@ -9,6 +9,7 @@ export class RepairPanel {
   /** Mount an original assertion list or an explicit subset of coalesced contributors. @param {object} view RelationshipView. @param {string[]|null} ids Requested original identities or all library roots. */
   constructor(view, ids) {
     this.view = view; this.ids = ids; this.offset = 0; this.disposed = false; this.generation = 0;
+    this.selected = new Set();
     this.abort = new view.window.AbortController(); const { document, t } = view;
     this.root = element(document, 'section', { 'data-rr-repairs': '', 'aria-busy': 'true' });
     this.root.style.cssText = 'display:grid;gap:8px;padding-block:12px';
@@ -19,7 +20,9 @@ export class RepairPanel {
     this.previous = ruleButton(owner, 'previous', 'roots-previous', () => { this.offset -= 25; this.run(() => this.page()); });
     this.next = ruleButton(owner, 'next', 'roots-next', () => { this.offset += 25; this.run(() => this.page()); });
     this.controls.append(this.previous, this.next);
-    this.root.append(this.message, this.body, this.controls, this.error,
+    this.removeSelected = ruleButton(owner, 'remove-selected', 'remove-selected', () => view.openRemoval([...this.selected]));
+    this.removeSelected.disabled = true;
+    this.root.append(this.message, this.body, this.controls, this.removeSelected, this.error,
       ruleButton(owner, 'close-repairs', 'close-repairs', () => view.finishEditor()));
   }
 
@@ -59,6 +62,14 @@ export class RepairPanel {
       const status = [source, target].find(value => value.status !== 'active')?.status
         ?? (this.diagnostics.some(value => value.code === 'self-edge' && value.details.id === root.id) ? 'self-edge' : 'active');
       card.dataset.rrEndpointStatus = status;
+      const checkbox = element(document, 'input', { type: 'checkbox', 'data-rr-select-original': root.id });
+      checkbox.checked = this.selected.has(root.id); checkbox.disabled = !context.editable;
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) this.selected.add(root.id); else this.selected.delete(root.id);
+        this.removeSelected.disabled = !context.editable || this.selected.size === 0;
+        this.removeSelected.textContent = `${t('remove-selected')} (${this.selected.size})`;
+      }, { signal: this.pageAbort.signal });
+      const select = element(document, 'label'); select.append(checkbox, document.createTextNode(t('select-original'))); card.append(select);
       card.append(element(document, 'p', {}, `${source.title} [${root.source.key}] → ${root.type} → ${target.title} [${root.target.key}]`),
         element(document, 'p', {}, literalValues(root.metadata)), element(document, 'p', {}, `${t('contribution')}: ${root.id} · ${status}`));
       for (const [key, mode] of [['edit-original', 'edit'], ['remove-original', 'remove']]) {
@@ -76,7 +87,7 @@ export class RepairPanel {
   invalidate() {
     this.generation++; if (this.pageAbort) this.pageAbort.abort();
     this.error.textContent = this.view.t('stale-repairs');
-    for (const control of this.root.querySelectorAll('button')) if (control.dataset.rrAction !== 'close-repairs') control.disabled = true;
+    for (const control of this.root.querySelectorAll('button,input')) if (control.dataset.rrAction !== 'close-repairs') control.disabled = true;
     this.root.setAttribute('aria-busy', 'false');
   }
 

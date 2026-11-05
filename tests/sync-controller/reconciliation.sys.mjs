@@ -12,6 +12,14 @@ async function alias(Zotero, subject, uri) {
 
 /** Run one real native lifecycle foundation phase; application/UI integration has separate remaining gates. @param {object} job Phase/artifact/saved keys. @param {object} api Actual platform. @returns {Promise<object>} Verified module behavior. */
 export async function reconciliation(job, api) {
+  if (job.action === 'reconcile:bulk-edges') {
+    const { reconciliationBulkEdges } = await import('./reconciliation-bulk-edges.sys.mjs');
+    return reconciliationBulkEdges(job, api);
+  }
+  if (job.action === 'reconcile:bulk-ui') {
+    const { reconciliationBulkUI } = await import('./reconciliation-bulk-ui.sys.mjs');
+    return reconciliationBulkUI(job, api);
+  }
   if (job.action.startsWith('reconcile:alias-ui')) {
     const { reconciliationAliasUI } = await import('./reconciliation-alias-ui.sys.mjs');
     return reconciliationAliasUI(job, api);

@@ -70,3 +70,6 @@ reference-relationships-rule-original-keys = Original reference keys and metadat
 reference-relationships-rule-choose-contribution = Choose original contribution…
 reference-relationships-rule-conflict-field = Conflicting field
 reference-relationships-rule-unresolved-before = Native merge aliases are unresolved. The complete current graph is unavailable; all original reference keys and values remain below. Choose an explicit repair before saving.
+reference-relationships-rule-select-original = Select this original for removal
+reference-relationships-rule-remove-selected = Review removal of selected originals
+reference-relationships-rule-confirm-removals = Confirm selected removals

@@ -99,7 +99,7 @@ async function journey(job, api, gateway, kind) {
 /** Run unknown native alias UI acceptance and clean restarted readback. @param {object} job Phase/artifact. @param {object} api Actual platform. @returns {Promise<object>} Evidence. */
 export async function reconciliationAliasUI(job, api) {
   const production = await resources(job, api), { Zotero } = api, app = Zotero.ReferenceRelationships.application;
-  if (job.action === 'reconcile:alias-ui-restart') {
+  if (['reconcile:alias-ui-restart', 'reconcile:alias-ui-final'].includes(job.action)) {
     await preserved(api, job.before, job.count);
     check((await app.reconcile('self', page)).state === 'ready', 'Restart lost explicit unknown repair');
     const selected = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, job.ambiguous.selected);

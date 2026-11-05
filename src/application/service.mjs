@@ -8,6 +8,7 @@ import { proposeRuleChange } from './rule-commands.mjs';
 import { LifecycleProjection } from './lifecycle.mjs';
 import { indexProjection, projectedPage, inspectionPage } from './projection-views.mjs';
 import { IssuedReviews } from './receipts.mjs';
+import { proposeRemoval } from './assertion-commands.mjs';
 
 /** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
 function copyState(state) {
@@ -170,11 +171,14 @@ export class RelationshipApplication {
 
   /** Draft retraction of exactly one explicit assertion. @param {string} id Assertion ID. @param {string} scope Library. @returns {Promise<object>} Detached command and revision. */
   async draftRemove(id, scope) {
-    this.#active(); identifier(id);
+    return this.draftRemoveMany([id], scope);
+  }
+
+  /** Draft atomic retraction of exactly the selected existing original assertions. @param {string[]} ids Nonempty unique original IDs. @param {string} scope Containing library. @returns {Promise<object>} Detached replacement command and captured revision. */
+  async draftRemoveMany(ids, scope) {
+    this.#active();
     const state = await this.#current(scope), graph = this.#base(state, scope);
-    const index = graph.assertions.findIndex(assertion => assertion.id === id);
-    check(index >= 0, 'Unknown explicit assertion'); graph.assertions.splice(index, 1);
-    return { command: { kind: 'replace', snapshot: graph }, expectedRevision: state.state === 'ready' ? state.head : null };
+    return { command: { kind: 'replace', snapshot: proposeRemoval(graph, ids) }, expectedRevision: state.state === 'ready' ? state.head : null };
   }
 
   /** Propose a versioned catalog edit and explicit metadata migration without writes. @param {object} input Exact {library,kind,type,migration}. @returns {Promise<object>} Detached replacement command and expected revision. */
