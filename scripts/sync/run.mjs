@@ -11,7 +11,7 @@ import { finished } from 'node:stream/promises';
 import { validateEnvironment, validateTransfer } from './protocol.mjs';
 
 /** Reject invalid configuration before any profile mutation. @param {object} config Input. @returns {void} */
-function validateConfig(config) {
+export function validateConfig(config) {
   for (const key of ['writable', 'restricted']) {
     assert.ok(Number.isSafeInteger(config.groups?.[key]) && config.groups[key] > 0, 'Positive group IDs are required');
   }
@@ -60,7 +60,7 @@ function awaitExit(child) {
 }
 
 /** Run one real client job without exposing authentication files. @param {object} options Shared environment. @param {string} role Client alias. @param {object} job Action. @returns {Promise<object>} Native result. */
-async function nativeJob(options, role, job) {
+export async function nativeJob(options, role, job) {
   const { prepareSignedSession } = await import('./signed-session.mjs');
   const client = options.config.clients[role];
   await requireClosed(client.profile);
@@ -119,4 +119,6 @@ async function main() {
   console.log(JSON.stringify({ ok: true, root, marker, keys: created.keys }));
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+}

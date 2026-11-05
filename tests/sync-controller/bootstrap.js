@@ -1,6 +1,7 @@
 /** Real account, metadata-sync and permission assertions; no credentials are read. */
-/* global Zotero, Services, IOUtils, DOMParser */
+/* global Zotero, Services, IOUtils, DOMParser, ChromeUtils, Components, crypto, TextEncoder */
 var syncJob;
+var controllerRootURI;
 
 /** Assert native behavior. @param {boolean} value Condition. @param {string} message Failure. @returns {void} */
 function check(value, message) {
@@ -85,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('feasibility:') || syncJob.action.startsWith('publication:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-feasibility', Services.io.newURI(controllerRootURI));
+    const { runExperiment } = ChromeUtils.importESModule('resource://rr-feasibility/native-experiments.sys.mjs');
+    return runExperiment(syncJob, { Zotero, Services, IOUtils, DOMParser, ChromeUtils, crypto, TextEncoder, synchronize });
+  }
   await synchronize();
   const identity = inspection();
   if (syncJob.action === 'inspect') return identity;
@@ -153,7 +161,8 @@ async function run() {
 }
 
 /** Schedule test work after native startup. @returns {void} */
-function startup() {
+function startup({ rootURI }) {
+  controllerRootURI = rootURI;
   run().catch(error => {
     Zotero.logError(new Error(`Sync probe initialization failed: ${error.name}`));
     Services.startup.quit(Services.startup.eForceQuit);
