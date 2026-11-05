@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('storage:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-storage-tests', Services.io.newURI(controllerRootURI));
+    const { repositoryConformance } = ChromeUtils.importESModule('resource://rr-storage-tests/repository.sys.mjs');
+    return repositoryConformance(syncJob, { Zotero, Services, Components, ChromeUtils, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action === 'contracts:baseline') {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);
