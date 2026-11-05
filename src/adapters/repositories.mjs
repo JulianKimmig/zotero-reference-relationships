@@ -6,7 +6,7 @@ import { check } from '../domain/values.mjs';
 /**
  * Share real native transports by scope; guarded writers retain their exact library identity.
  * @param {object} options Actual {Zotero,DOMParser,crypto,TextEncoder,gateway} resources.
- * @returns {object} {repositoryFor,clear} composition boundary.
+ * @returns {object} {repositoryFor,repositoryForEvent,clear} composition boundary.
  */
 export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway }) {
   const transports = new Map();
@@ -15,8 +15,8 @@ export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder
     const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
     return Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, '0')).join('');
   }
-  /** Construct a real repository with an optional declared application transaction guard. @param {string} scope Containing scope. @param {Function|null} guard Null for unguarded reads, callback for application writes. @returns {GraphRepository} Actual repository. */
-  function repositoryFor(scope, guard) {
+  /** Compose the requested native transaction boundary and its application guard. @param {string} scope Library. @param {Function|null} guard Required writer guard or null for reads. @param {boolean} event Independent event boundary. @returns {GraphRepository} Real repository. */
+  function construct(scope, guard, event) {
     check(guard === null || typeof guard === 'function', 'Explicit application guard or null is required');
     if (!transports.has(scope)) {
       transports.set(scope, createNativeTransport({ Zotero, DOMParser, libraryID: gateway.library(scope).libraryID }));
@@ -25,12 +25,20 @@ export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder
     const transport = guard === null ? base : { ...base,
       /** Run real eligibility checks under the actual native DB lock. @param {Function} action Actual repository writes. @returns {Promise<*>} Committed result. */
       transaction(action) {
-        return base.transaction(async function guardedWrite() { await guard(); return action(); });
+        const run = event ? base.transactionFromEvent : base.transaction;
+        return run(async function guardedWrite() { await guard(); return action(); });
       },
     };
     return new GraphRepository({ transport, digest, now: () => new Date().toISOString() });
   }
+  /** Create a strict read/writer repository that rejects enclosing transactions. @param {string} scope Library. @param {Function|null} guard Callback or null. @returns {GraphRepository} Real repository. */
+  function repositoryFor(scope, guard) { return construct(scope, guard, false); }
+  /** Create a guarded native-event writer that queues for its own transaction. @param {string} scope Library. @param {Function} guard Commit-time checks. @returns {GraphRepository} Real repository; never invoke in a transaction callback. */
+  function repositoryForEvent(scope, guard) {
+    check(typeof guard === 'function', 'Event writes require an explicit transaction guard');
+    return construct(scope, guard, true);
+  }
   /** Release owned transport references after application shutdown. @returns {void} */
   function clear() { transports.clear(); }
-  return { repositoryFor, clear };
+  return { repositoryFor, repositoryForEvent, clear };
 }

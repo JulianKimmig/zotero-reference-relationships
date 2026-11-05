@@ -121,7 +121,7 @@ export class CatalogEditor {
     const { command, expectedRevision } = this.review;
     const controls = [...this.root.querySelectorAll('input,button,textarea,select')].map(control => [control, control.disabled]);
     for (const [control] of controls) control.disabled = true;
-    try { await this.view.app.apply(command, expectedRevision); if (!this.disposed) this.view.finishEditor(); }
+    try { await this.view.app.applyFromEvent(command, expectedRevision); if (!this.disposed) this.view.finishEditor(); }
     finally { if (!this.disposed) for (const [control, disabled] of controls) control.disabled = disabled; }
   }
 

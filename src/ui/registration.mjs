@@ -39,7 +39,7 @@ export function registerInterface({ Zotero, id, rootURI, application, gateway, r
     const section = entry.body.closest('item-pane-custom-section');
     section.querySelector('collapsible-section').open = true;
     await section.closest('item-details').scrollToPane(registeredPane, 'instant');
-    await entry.refresh(); entry.openEditor('create', null);
+    await entry.refresh(); await entry.openEditor('create', null);
   }
   const registeredMenu = Zotero.MenuManager.registerMenu({ menuID: 'reference-relationships-add', pluginID: id,
     target: 'main/library/item', menus: [{ menuType: 'menuitem', l10nID: 'reference-relationships-add-menu', icon,

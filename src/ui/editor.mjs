@@ -121,7 +121,7 @@ export class RelationshipEditor {
     for (const [control] of controls) control.disabled = true;
     this.root.setAttribute('aria-busy', 'true');
     try {
-      await this.view.app.apply(command, expectedRevision);
+      await this.view.app.applyFromEvent(command, expectedRevision);
       if (!this.disposed) this.view.finishEditor();
     } finally {
       if (!this.disposed) {

@@ -49,7 +49,7 @@ async function runJourney(job, api) {
     await createThroughUI(api, window, root, b, 'cancelled metadata', false);
     check((await state(Zotero)).state === 'uninitialized', 'Cancel created authority');
     const note = 'Café 你好 😀 <img src="x" onerror="invalid"> & relationship';
-    await createThroughUI(api, window, root, b, note, true);
+    await createThroughUI(api, window, root, b, note, true, true);
     const created = await state(Zotero); check(created.state === 'ready' && created.snapshot.assertions.length === 1, 'Saved relationship is missing');
     const assertion = created.snapshot.assertions[0];
     check(assertion.source.key === a.key && assertion.target.key === b.key && assertion.type === 'referencing' && assertion.metadata.note === note, 'Saved form values differ');

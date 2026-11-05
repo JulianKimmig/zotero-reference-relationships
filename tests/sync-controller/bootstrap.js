@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('rules:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-engine-tests', Services.io.newURI(controllerRootURI));
+    const { rulesJourney } = ChromeUtils.importESModule('resource://rr-engine-tests/rules-journey.sys.mjs');
+    return rulesJourney(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('catalog:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);
@@ -166,10 +173,13 @@ async function execute() {
 
 /** Write non-secret results and close the controlled client. @param {object} report Native output. @param {Error|null} error Failure. @returns {Promise<void>} */
 async function finish(report, error) {
+  await Zotero.DB.waitForTransaction();
   const result = { ok: !error, report, error: error ? { name: error.name, message: error.message } : null,
-    profile: Zotero.Profile.dir, data: Zotero.DataDirectory.dir, version: Zotero.version };
+    profile: Zotero.Profile.dir, data: Zotero.DataDirectory.dir, version: Zotero.version,
+    shutdown: 'native-attempt-quit-after-transactions' };
   await IOUtils.writeUTF8(syncJob.result, JSON.stringify(result, null, 2));
-  Services.startup.quit(Services.startup.eForceQuit);
+  await Zotero.DB.waitForTransaction();
+  Zotero.Utilities.Internal.quit();
 }
 
 /** Consume one job before mutations, preventing accidental replay. @returns {Promise<void>} */

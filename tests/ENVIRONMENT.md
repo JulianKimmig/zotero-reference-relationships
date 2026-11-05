@@ -16,6 +16,7 @@ ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node 
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/publication.mjs /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/ui.mjs /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/catalog.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/rules.mjs /absolute/test-config.json
 ```
 
 Build creates a fresh production-only XPI in /tmp; it refuses overwriting an existing output and rejects missing/non-HTTPS update URLs. The real configured endpoint is https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json, published manually by the user. No agent push is part of this workflow.
@@ -53,6 +54,15 @@ kinds, rename/retire the referenced type, reject invalid/stale edits, restart an
 review a destructive metadata migration. Signed B1 independently verifies real
 read-only catalog controls and publication denial. It preserves existing signed
 authority. The production package excludes both test controllers.
+
+The rule runner uses a fresh anonymous client and a separate restart phase to
+verify one-generation inverse publication, independent roots/manual support,
+diamond routes and immutable-root conditions, conflicts/stale revisions, the
+fixed 100000-transition limit using 1000 pairs of real endpoints, retraction,
+retyping and native metadata ownership. It does not provide a rule editor.
+The existing UI runner also holds a real host transaction during Save: direct
+nested writes must reject, while the event command waits for its own transaction
+and publishes only after the host transaction is released.
 
 Publication writes `progress.json` after each successful native job and `result.json` only at full completion. Resume an interrupted suite with `node scripts/sync/publication.mjs /absolute/test-config.json --resume /absolute/evidence-root` only with the same fixture semantics and controller revision. A process crash after a mutation is a failed job even if its private result says success: inspect it and verify its saved keys after a clean restart before recording completion; do not blindly replay the mutation. Missing dependencies stay pending, multiple complete heads stay conflict, and malformed or unknown envelopes fail explicitly.
 

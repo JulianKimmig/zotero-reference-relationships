@@ -13,6 +13,7 @@ export function createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncod
   const gateway = createItemGateway(Zotero);
   const repositories = createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway });
   const application = new RelationshipApplication({ gateway, repositoryFor: repositories.repositoryFor,
+    repositoryForEvent: repositories.repositoryForEvent,
     now: () => new Date().toISOString(), newID: () => crypto.randomUUID() });
   const ui = registerInterface({ Zotero, id, rootURI, application, gateway, report: error => Zotero.logError(error) });
   /** Release service/transport ownership after official UI teardown. @returns {void} */

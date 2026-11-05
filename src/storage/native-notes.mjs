@@ -97,9 +97,8 @@ export function createNativeTransport({ Zotero, DOMParser, libraryID }) {
     return item.key;
   }
 
-  /** Own the full transaction so publication cannot precede an outer rollback. @param {Function} action Asynchronous write callback. @returns {Promise<*>} Committed result. */
-  async function transaction(action) {
-    check(!Zotero.DB.inTransaction(), 'Repository cannot publish inside an external transaction', 'storage');
+  /** Queue and own the full native transaction; invoke only at an independent command/event boundary. @param {Function} action Actual write callback. @returns {Promise<*>} Result after our own commit/rollback. */
+  async function ownTransaction(action) {
     const created = [];
     try {
       return await Zotero.DB.executeTransaction(async function writeAuthority() {
@@ -113,5 +112,20 @@ export function createNativeTransport({ Zotero, DOMParser, libraryID }) {
     } finally { createdInTransaction = null; }
   }
 
-  return { identity: library, scope, assertWritable, scan, get, create, transaction };
+  /** Reject directly enclosing transactions before starting our owned transaction. @param {Function} action Write callback. @returns {Promise<*>} Committed result. */
+  async function transaction(action) {
+    check(!Zotero.DB.inTransaction(), 'Repository cannot publish inside an external transaction', 'storage');
+    return ownTransaction(action);
+  }
+
+  /** Queue a native event command behind unrelated host transactions; never call from a transaction callback. @param {Function} action Guarded writes. @returns {Promise<*>} Result after this command's own native commit. */
+  async function transactionFromEvent(action) { return ownTransaction(action); }
+
+  return { identity: library, scope, assertWritable, scan, get, create, transaction, transactionFromEvent };
+}
+
+/** Construct a transport for independent native event/command callbacks, using its own queued transaction. Never call writes from a database transaction callback. @param {object} options Actual {Zotero,DOMParser,libraryID}. @returns {object} Real native transport with the explicit event transaction policy. */
+export function createEventTransport(options) {
+  const transport = createNativeTransport(options);
+  return { ...transport, transaction: transport.transactionFromEvent };
 }

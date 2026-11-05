@@ -26,8 +26,14 @@ them can make relationship data unavailable. Conflicting or incomplete generatio
 block changes until resolved. Native reference fields, ordinary notes and Zotero's
 Related links retain their separate behavior.
 
-Automatic inverse relationships and custom rules are not available yet.
-Creating Referencing currently creates only that explicit link.
+Configured rules generate relationships from explicit roots. Rows distinguish
+manual, generated and combined support; editing or removing a manual contribution
+preserves independent rule support. Generated-only rows follow their roots and
+rules and cannot be edited directly.
+
+The rule configuration interface is not available yet. The initial catalog does
+not enable inverse rules automatically; the Referencing type alone creates an
+explicit link.
 
 The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
 

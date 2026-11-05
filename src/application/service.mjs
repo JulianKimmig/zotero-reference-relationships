@@ -1,9 +1,11 @@
-/** Platform-independent explicit relationship commands over injected native gateway and repository boundaries. */
+/** Platform-independent rooted relationship commands over native gateway and repository boundaries. */
 import { check, exact, identifier, jsonCopy } from '../domain/values.mjs';
 import { validateGraph, validateItemRef } from '../domain/graph-contract.mjs';
 import { initialGraph } from './seed.mjs';
-import { changesBetween, explicitEdges } from './changes.mjs';
+import { changesBetween } from './changes.mjs';
 import { proposeTypeChange, validateTypeTransition } from './catalog.mjs';
+import { validateRuleTransition } from './rule-transition.mjs';
+import { buildRelationshipIndex, queryRelationships } from './relationship-index.mjs';
 
 /** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
 function copyState(state) {
@@ -14,27 +16,29 @@ function copyState(state) {
 /** Select unique changed endpoints in deterministic library/key order. @param {object} changeSet Valid review. @returns {object[]} Detached refs requiring current native eligibility. */
 function changedRefs(changeSet) {
   const refs = new Map();
-  for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after)]) {
+  for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after),
+    ...changeSet.derived.added, ...changeSet.derived.updated.map(value => value.after)]) {
     for (const ref of [assertion.source, assertion.target]) refs.set(JSON.stringify(ref), ref);
   }
   return [...refs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, ref]) => jsonCopy(ref));
 }
 
-/** Explicit-only application; repository factory must enforce the supplied guard inside its native transaction. */
+/** Rooted application; repository factory enforces the supplied guard inside its native transaction. */
 export class RelationshipApplication {
-  #gateway; #repositoryFor; #now; #newID;
+  #gateway; #repositoryFor; #repositoryForEvent; #now; #newID;
   #repositories = new Map(); #states = new Map(); #stopped = false;
+  #views = new WeakMap();
 
   /**
    * Bind required production dependencies without accessing native globals.
-   * @param {object} options {gateway,repositoryFor,now,newID}; factory accepts (scope,guard|null).
+   * @param {object} options {gateway,repositoryFor,repositoryForEvent,now,newID}; factories bind strict/event native transaction boundaries.
    * @returns {RelationshipApplication} Application sharing repository identity and writer/cache ownership.
    */
-  constructor({ gateway, repositoryFor, now, newID }) {
+  constructor({ gateway, repositoryFor, repositoryForEvent, now, newID }) {
     check(!!gateway && ['describe', 'assertWritable', 'ref'].every(name => typeof gateway[name] === 'function'),
       'Explicit item gateway required');
-    check([repositoryFor, now, newID].every(value => typeof value === 'function'), 'Explicit repository, clock and ID functions required');
-    this.#gateway = gateway; this.#repositoryFor = repositoryFor; this.#now = now; this.#newID = newID;
+    check([repositoryFor, repositoryForEvent, now, newID].every(value => typeof value === 'function'), 'Explicit repository boundaries, clock and ID functions required');
+    this.#gateway = gateway; this.#repositoryFor = repositoryFor; this.#repositoryForEvent = repositoryForEvent; this.#now = now; this.#newID = newID;
   }
 
   /** Reject operations after teardown. @returns {void} Throws a visible failure. */
@@ -97,7 +101,7 @@ export class RelationshipApplication {
   }
 
   /**
-   * Read a bounded explicit page using the actual shared adjacency index after the first observation.
+   * Read a bounded materialized page from a per-authority evaluation/endpoint index.
    * @param {object} input ItemRef. @param {string} direction outgoing/incoming/both.
    * @param {string|null} typeFilter Type ID or null. @param {object} page Exact {offset,limit}.
    * @returns {Promise<object>} Frozen-contract {revision,relationships,total,nextOffset,diagnostics}.
@@ -106,15 +110,16 @@ export class RelationshipApplication {
     const ref = validateItemRef(input), detachedPage = jsonCopy(page);
     const state = await this.#current(ref.library);
     check(state.state === 'ready', `Relationship authority is ${state.state}; a ready generation is required`, 'conflict');
-    const result = this.#repository(ref.library).adjacent(ref, state.head, direction, typeFilter, detachedPage);
-    const relationships = explicitEdges({ ...state.snapshot, assertions: result.assertions });
+    if (!this.#views.has(state)) this.#views.set(state, buildRelationshipIndex(state.snapshot));
+    const result = queryRelationships(this.#views.get(state), ref, direction, typeFilter, detachedPage);
+    const { relationships } = result;
     const endpoints = new Map();
     for (const edge of relationships) for (const endpoint of [edge.source, edge.target]) endpoints.set(JSON.stringify(endpoint), endpoint);
     const descriptions = await Promise.all([...endpoints.values()].map(endpoint => this.describe(endpoint)));
     const diagnostics = descriptions.filter(value => value.status !== 'active').map(value => ({
       code: 'endpoint', message: `Relationship endpoint is ${value.status}`, details: { ref: value.ref, status: value.status },
     }));
-    return { revision: result.revision, relationships, total: result.total, nextOffset: result.nextOffset, diagnostics };
+    return { revision: state.head, relationships, total: result.total, nextOffset: result.nextOffset, diagnostics };
   }
 
   /** Select a draft graph only from ready authority or explicit uninitialized action. @param {object} state Backend state. @param {string} scope Library. @returns {object} Independent draft graph. */
@@ -195,8 +200,7 @@ export class RelationshipApplication {
       || (state.state === 'uninitialized' && expectedRevision === null), 'Authority revision changed; review again', 'conflict');
     const current = this.#base(state, snapshot.library);
     validateTypeTransition(current, snapshot);
-    check(!current.rules.some(rule => rule.enabled) && !snapshot.rules.some(rule => rule.enabled),
-      'This build supports explicit relationships; rule evaluation is not available yet');
+    validateRuleTransition(current, snapshot);
     const changeSet = changesBetween(current, snapshot);
     for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after)]) {
       this.#activeType(snapshot, assertion.type);
@@ -211,10 +215,16 @@ export class RelationshipApplication {
    * @param {object} command Full replacement command. @param {string|null} expectedRevision Reviewed head.
    * @returns {Promise<object>} {revision,changeSet} after atomic publication and a fresh read.
    */
-  async apply(command, expectedRevision) {
+  async apply(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryFor); }
+
+  /** Apply at an independent native event boundary, queuing behind unrelated host transactions. Never call from a native transaction callback. @param {object} command Reviewed snapshot command. @param {string|null} expectedRevision Head. @returns {Promise<object>} Committed revision and complete ChangeSet. */
+  async applyFromEvent(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryForEvent); }
+
+  /** Revalidate and publish using the explicitly selected native transaction boundary. @param {object} command Snapshot command. @param {string|null} expectedRevision Head. @param {Function} repositoryFor Required strict/event factory. @returns {Promise<object>} Committed revision and ChangeSet. */
+  async #apply(command, expectedRevision, repositoryFor) {
     const preview = await this.preview(command, expectedRevision), scope = preview.snapshot.library;
     const refs = changedRefs(preview.changeSet);
-    const repository = this.#repositoryFor(scope, async () => {
+    const repository = repositoryFor(scope, async () => {
       this.#active(); await this.#gateway.assertWritable(scope, jsonCopy(refs)); this.#active();
     });
     let revision;
@@ -229,7 +239,7 @@ export class RelationshipApplication {
 
   /** Clear every cached epoch and shared index. @returns {void} */
   invalidateAll() {
-    this.#states.clear();
+    this.#states.clear(); this.#views = new WeakMap();
     for (const repository of this.#repositories.values()) repository.invalidate();
     this.#repositories.clear();
   }
@@ -237,6 +247,6 @@ export class RelationshipApplication {
   /** Stop commands and release cached native references; idempotent. @returns {void} */
   stop() {
     this.#stopped = true; this.invalidateAll();
-    this.#gateway = null; this.#repositoryFor = null; this.#now = null; this.#newID = null;
+    this.#gateway = null; this.#repositoryFor = null; this.#repositoryForEvent = null; this.#now = null; this.#newID = null;
   }
 }

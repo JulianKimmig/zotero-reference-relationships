@@ -2,6 +2,7 @@
 import { element, button, metadataText } from './dom.mjs';
 import { RelationshipEditor } from './editor.mjs';
 import { CatalogEditor } from './catalog-editor.mjs';
+import { check } from '../domain/values.mjs';
 
 /** Own one native section's DOM and selection generation. */
 export class RelationshipView {
@@ -127,24 +128,36 @@ export class RelationshipView {
     }
   }
 
-  /** Render one literal manual relationship, direction and safe native navigation. @param {object} row {edge,outgoing,other}. @returns {void} */
+  /** Render literal effective metadata, contributor origin and safe native actions. @param {object} row {edge,outgoing,other}. @returns {void} */
   appendRow({ edge, outgoing, other }) {
     const type = this.context.types.find(type => type.id === edge.type);
     const row = element(this.document, 'section', { 'data-rr-relation': edge.key });
+    const manual = edge.assertions.length > 0, generated = edge.supports.length > 0;
+    row.dataset.rrOrigin = manual ? generated ? 'both' : 'manual' : 'generated';
     row.style.cssText = 'padding-block:8px;border-block-end:1px solid color-mix(in srgb,currentColor 20%,transparent)';
-    row.append(element(this.document, 'p', {}, `${outgoing ? 'Outgoing' : 'Incoming'} · ${type.label} · Manual`));
+    row.append(element(this.document, 'p', {}, `${outgoing ? 'Outgoing' : 'Incoming'} · ${type.label} · ${manual ? generated ? 'Manual + generated' : 'Manual' : 'Generated'}`));
     const navigate = button(this.document, other.title, 'navigate', () => this.run(() => this.gateway.navigate(this.window, other.ref)), this.abort.signal);
     navigate.disabled = other.status !== 'active'; row.append(navigate);
     const text = metadataText(edge.metadata, type); if (text) row.append(element(this.document, 'p', {}, text));
-    for (const [mode, label, action] of [['edit', 'Edit', 'edit'], ['remove', 'Remove', 'remove']]) {
+    if (generated) row.append(element(this.document, 'p', {}, `${edge.supports.length} rule support${edge.supports.length === 1 ? '' : 's'}. Generated values follow their explicit roots and rules.`));
+    for (const [mode, label, action] of manual ? [['edit', 'Edit', 'edit'], ['remove', 'Remove', 'remove']] : []) {
       const control = button(this.document, label, action, () => this.run(() => this.openEditor(mode, edge)), this.abort.signal);
       control.disabled = !this.context.editable; row.append(control);
     }
     this.list.append(row);
   }
 
-  /** Open an explicit draft without writing authority. @param {string} mode create/edit/remove. @param {object|null} edge Manual edge. @returns {void} */
-  openEditor(mode, edge) {
+  /** Resolve original manual metadata before opening a draft; discard stale selection responses. @param {string} mode create/edit/remove. @param {object|null} edge Effective edge with manual authority, or null for creation. @returns {Promise<void>} Editor opened or stale result ignored. */
+  async openEditor(mode, edge) {
+    const generation = this.generation;
+    if (edge) {
+      const state = await this.app.read(this.ref.library);
+      check(state.state === 'ready', 'Refresh relationship authority before editing', 'conflict');
+      const assertion = state.snapshot.assertions.find(value => value.id === edge.assertions[0]);
+      check(!!assertion, 'This manual relationship is no longer available', 'conflict');
+      edge = { ...edge, metadata: assertion.metadata };
+      if (!this.current(generation)) return;
+    }
     if (this.editor) this.editor.dispose();
     this.editor = new RelationshipEditor({ view: this, mode, edge }); this.root.append(this.editor.root);
   }

@@ -1,6 +1,7 @@
-/** Pure detached explicit projections and exact sorted graph review deltas; no rule evaluation. */
+/** Pure explicit projections and exact sorted review deltas with complete rooted recomputation. */
 import { check } from '../domain/values.mjs';
 import { edgeKey, validateGraph } from '../domain/graph-contract.mjs';
+import { evaluateGraph } from '../domain/evaluate.mjs';
 
 /** Compare stable ASCII identities or serialized EdgeKeys. @param {string} a First key. @param {string} b Second key. @returns {number} Lexical order. */
 function compare(a, b) { return a < b ? -1 : a > b ? 1 : 0; }
@@ -41,7 +42,7 @@ function delta(before, after, identity) {
 }
 
 /**
- * Review complete validated graphs without evaluating declarations or writing authority.
+ * Review complete validated graphs with full rooted recomputation and no authority writes.
  * Validation normalizes object property order and Unicode before comparison. Each
  * graph is copied separately so a review of two bounded graphs can exceed 1 MiB.
  * @param {object} before Current graph in the same containing library.
@@ -53,5 +54,5 @@ export function changesBetween(before, after) {
   check(current.library === proposed.library, 'Cannot review graphs from different libraries');
   return { assertions: delta(current.assertions, proposed.assertions, 'id'),
     types: delta(current.types, proposed.types, 'id'), rules: delta(current.rules, proposed.rules, 'id'),
-    derived: delta(project(current), project(proposed), 'key'), diagnostics: [] };
+    derived: delta(evaluateGraph(current).relationships, evaluateGraph(proposed).relationships, 'key'), diagnostics: [] };
 }

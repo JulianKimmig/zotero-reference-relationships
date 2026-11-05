@@ -53,7 +53,7 @@ export async function repositoryConformance(job, api) {
     .QueryInterface(api.Components.interfaces.nsIResProtocolHandler);
   handler.setSubstitution('rr-production', api.Services.io.newURI(job.sourceURI));
   const { GraphRepository } = api.ChromeUtils.importESModule('resource://rr-production/storage/repository.mjs');
-  const { createNativeTransport } = api.ChromeUtils.importESModule('resource://rr-production/storage/native-notes.mjs');
+  const { createNativeTransport, createEventTransport } = api.ChromeUtils.importESModule('resource://rr-production/storage/native-notes.mjs');
   const { canonicalJSON } = api.ChromeUtils.importESModule('resource://rr-production/storage/canonical.mjs');
   const { renderNote } = api.ChromeUtils.importESModule('resource://rr-production/storage/chunks.mjs');
   /** Real UTF-8 SHA-256. @param {string} text Canonical text. @returns {Promise<string>} Hex digest. */
@@ -62,7 +62,8 @@ export async function repositoryConformance(job, api) {
     return Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, '0')).join('');
   }
   const libraryID = api.Zotero.Groups.get(job.groups.writable).libraryID;
-  const transport = createNativeTransport({ Zotero: api.Zotero, DOMParser: api.DOMParser, libraryID });
+  const constructTransport = job.action === 'storage:transaction-guard' ? createNativeTransport : createEventTransport;
+  const transport = constructTransport({ Zotero: api.Zotero, DOMParser: api.DOMParser, libraryID });
   /** Construct an independent repository sharing native writer ownership. @param {Function} now External clock. @returns {object} Repository. */
   function repository(now = () => new Date().toISOString()) { return new GraphRepository({ transport, digest, now }); }
   if (job.action !== 'storage:fork') await api.synchronize();

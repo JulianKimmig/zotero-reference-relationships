@@ -93,16 +93,38 @@ export async function chooseTarget(api, root, target) {
   await until(Zotero, () => root.querySelector('[data-rr-target-key]')?.dataset.rrTargetKey === target.key, 'chosen target label');
 }
 
-/** Fill, preview and either cancel or confirm an actual relationship editor. @param {object} api Native resources. @param {Window} window Owner. @param {Element} root Pane. @param {object} target Actual reference. @param {string} note Metadata. @param {boolean} save Confirm or cancel. @returns {Promise<void>} Action complete. */
-export async function createThroughUI(api, window, root, target, note, save) {
+/** Fill and review an actual relationship editor. @param {object} api Native resources. @param {Window} window Owner. @param {Element} root Pane. @param {object} target Reference. @param {string} note Metadata. @param {boolean} save Confirm or cancel. @param {boolean} exerciseHostTransaction Test first Save under a real held host transaction. @returns {Promise<void>} Action complete. */
+export async function createThroughUI(api, window, root, target, note, save, exerciseHostTransaction = false) {
   click(root, 'add');
   await until(api.Zotero, () => root.querySelector('[data-rr-editor]'), 'relationship editor');
   await chooseTarget(api, root, target);
   type(window, root.querySelector('[data-rr-field="note"]'), note);
   click(root, 'preview');
   await until(api.Zotero, () => root.querySelector('[data-rr-action="save"]') && !root.querySelector('[data-rr-action="save"]').disabled, 'relationship preview');
-  click(root, save ? 'save' : 'cancel');
+  if (save && exerciseHostTransaction) await saveDuringNativeTransaction(api, root, target);
+  else click(root, save ? 'save' : 'cancel');
   await until(api.Zotero, () => !root.querySelector('[data-rr-editor]') && root.dataset.rrState !== 'loading', 'editor completion');
+}
+
+/** Save through a real event while another native transaction is held; direct nesting must still reject. @param {object} api Native resources. @param {Element} root Actual editor. @param {object} target Native target. @returns {Promise<void>} Host transaction released and event publication allowed. */
+async function saveDuringNativeTransaction(api, root, target) {
+  const { Zotero } = api, app = Zotero.ReferenceRelationships.application;
+  const strict = await app.draftCreate({ source: { library: 'self', key: root.dataset.rrItemKey },
+    target: { library: 'self', key: target.key }, type: 'similar', metadata: { note: 'Must not publish inside the outer transaction' } });
+  const entered = Zotero.Promise.defer(), release = Zotero.Promise.defer();
+  const outer = Zotero.DB.executeTransaction(async function heldHostTransaction() {
+    let denied = false;
+    try { await app.apply(strict.command, strict.expectedRevision); }
+    catch (error) { check(error.code === 'storage', `Direct nesting failed for another reason: ${error.message}`); denied = true; }
+    check(denied, 'A directly nested application write was allowed'); entered.resolve();
+    await release.promise;
+  });
+  try {
+    await Promise.race([entered.promise, outer.then(() => { throw new Error('Outer transaction ended before the event test'); })]);
+    click(root, 'save'); await Zotero.Promise.delay(75);
+    check(!root.querySelector('[data-rr-editor] [role="alert"]').textContent, 'Event save rejected unrelated native transaction');
+    check((await app.read('self')).state === 'uninitialized', 'Event publication escaped its own transaction boundary');
+  } finally { release.resolve(); await outer; }
 }
 
 /** Type a new value during actual async review and require a fresh preview before saving. @param {object} api Native resources. @param {Window} window Owner. @param {Element} root Pane. @param {object} target Real target. @returns {Promise<void>} Race and cancellation verified. */

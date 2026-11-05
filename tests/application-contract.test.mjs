@@ -151,7 +151,10 @@ test('type and rule edits are full entities sorted by stable ID', () => {
   assert.deepEqual(delta.types.updated.map(entry => entry.after.id), ['referenced-by', 'referencing', 'similar']);
   assert.deepEqual(delta.rules.updated.map(entry => entry.after.id), ['a-rule', 'z-rule']);
   assert.deepEqual(delta.rules.updated[0], { before: before.rules[1], after: after.rules[1] });
-  assert.deepEqual(delta.derived, emptyDelta());
+  assert.deepEqual(delta.derived.added, []); assert.deepEqual(delta.derived.updated, []);
+  assert.equal(delta.derived.removed.length, 1);
+  assert.equal(delta.derived.removed[0].type, 'referenced-by');
+  assert.deepEqual(delta.derived.removed[0].supports.map(support => support.rule), ['a-rule', 'z-rule']);
 });
 
 test('normalized JSON equality ignores object key insertion and Unicode composition', () => {
