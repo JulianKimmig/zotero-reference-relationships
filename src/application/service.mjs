@@ -5,6 +5,7 @@ import { initialGraph } from './seed.mjs';
 import { changesBetween } from './changes.mjs';
 import { proposeTypeChange, validateTypeTransition } from './catalog.mjs';
 import { validateRuleTransition } from './rule-transition.mjs';
+import { proposeRuleChange } from './rule-commands.mjs';
 import { buildRelationshipIndex, queryRelationships } from './relationship-index.mjs';
 
 /** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
@@ -181,6 +182,17 @@ export class RelationshipApplication {
     const change = jsonCopy(input); exact(change, ['library', 'kind', 'type', 'migration']);
     const { library, ...definition } = change, state = await this.#current(library);
     const snapshot = proposeTypeChange(this.#base(state, library), definition, this.#now());
+    return { command: { kind: 'replace', snapshot }, expectedRevision: state.state === 'ready' ? state.head : null };
+  }
+
+  /** Propose a versioned rule create/update/delete without writes or generated authority. @param {object} input Exact {library,kind,rule} for create/update or {library,kind:'delete',id}. @returns {Promise<object>} Detached replacement command and expected native revision. */
+  async manageRules(input) {
+    this.#active();
+    const change = jsonCopy(input);
+    check(change !== null && typeof change === 'object' && !Array.isArray(change), 'Expected a rule command');
+    exact(change, change.kind === 'delete' ? ['library', 'kind', 'id'] : ['library', 'kind', 'rule']);
+    const { library, ...definition } = change, state = await this.#current(library);
+    const snapshot = proposeRuleChange(this.#base(state, library), definition);
     return { command: { kind: 'replace', snapshot }, expectedRevision: state.state === 'ready' ? state.head : null };
   }
 
