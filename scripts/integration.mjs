@@ -6,7 +6,7 @@ import { finished } from 'node:stream/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildProject, projectRoot } from './build.mjs';
-import { createSession, launchArguments, validateResult } from './session.mjs';
+import { createSession, launchArguments, validateResult, validateRuntimeLog } from './session.mjs';
 
 /** Await process exit with a bounded timeout and group cleanup. @param {import('node:child_process').ChildProcess} child @returns {Promise<object>} exit status. */
 function waitForExit(child) {
@@ -17,7 +17,7 @@ function waitForExit(child) {
       reject(new Error('Zotero integration timed out after 120 seconds'));
     }, 120000);
     child.once('error', error => { clearTimeout(timer); reject(error); });
-    child.once('exit', (code, signal) => { clearTimeout(timer); resolve({ code, signal }); });
+    child.once('close', (code, signal) => { clearTimeout(timer); resolve({ code, signal }); });
   });
 }
 
@@ -51,6 +51,7 @@ async function main() {
   try { result = JSON.parse(await readFile(session.result, 'utf8')); }
   catch (error) { throw new Error(`No valid driver result (${error.message}); exit=${JSON.stringify(status)}; log=${logPath}`); }
   validateResult(result, session);
+  validateRuntimeLog(await readFile(logPath, 'utf8'));
   if (status.code !== 0) throw new Error(`Zotero exited unsuccessfully: ${JSON.stringify(status)}; log=${logPath}`);
   console.log(JSON.stringify(result, null, 2));
 }

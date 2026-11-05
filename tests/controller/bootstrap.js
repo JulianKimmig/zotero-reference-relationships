@@ -1,6 +1,7 @@
 /** Real Zotero lifecycle assertions, loaded only into a dedicated test profile. */
-/* global Zotero, Services, ChromeUtils, IOUtils */
+/* global Zotero, Services, ChromeUtils, IOUtils, setTimeout, clearTimeout */
 var rrChecks = [];
+var rrReadiness = null;
 
 /** Read a required test-only string preference. @param {string} key @returns {string} */
 function preference(key) {
@@ -21,6 +22,65 @@ async function until(predicate, label) {
     await Zotero.Promise.delay(50);
   }
   throw new Error(`Timed out: ${label}`);
+}
+
+/** Capture the actual window API and mounted UI for failure diagnostics. @param {Window} window @param {string} stage @returns {object} serializable state. */
+function readinessSnapshot(window, stage) {
+  const pane = window.ZoteroPane;
+  const tabs = Array.from(window.document.querySelectorAll('#tab-bar-container .tab[data-id="zotero-pane"]'));
+  const tabRects = tabs.map(tab => {
+    const bounds = tab.getBoundingClientRect();
+    return { width: bounds.width, height: bounds.height };
+  });
+  const visibleTabs = tabRects.filter(bounds => bounds.width > 0 && bounds.height > 0);
+  return {
+    stage, closed: window.closed, documentReadyState: window.document.readyState,
+    paneLoaded: pane?.loaded === true, itemsViewType: typeof pane?.itemsView,
+    itemsViewConstructor: pane?.itemsView?.constructor?.name,
+    itemsWaitForLoad: typeof pane?.itemsView?.waitForLoad,
+    itemsInitializedType: typeof pane?.itemsView?.initialized,
+    collectionsViewConstructor: pane?.collectionsView?.constructor?.name,
+    collectionsWaitForLoad: typeof pane?.collectionsView?.waitForLoad,
+    tabMounted: tabs.length > 0, tabNodeCount: tabs.length, tabRects,
+    visibleTabCount: visibleTabs.length,
+  };
+}
+
+/** Bound an actual native load promise without substituting a delay. @param {Promise<*>} promise @param {string} label @returns {Promise<*>} native resolution. */
+async function withDeadline(promise, label) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`Timed out: ${label}`)), 15000);
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Wait for the packaged 10.0.7 tree APIs and visible React tab before teardown. @param {Window} window real main window. @returns {Promise<void>} */
+async function waitForWindowReady(window) {
+  try {
+    const pane = await until(() => {
+      rrReadiness = readinessSnapshot(window, 'waiting-for-tree-apis');
+      const candidate = window.ZoteroPane;
+      return candidate?.loaded && typeof candidate.itemsView?.waitForLoad === 'function'
+        && typeof candidate.collectionsView?.waitForLoad === 'function' && candidate;
+    }, 'second window pane and native tree APIs');
+    rrReadiness = readinessSnapshot(window, 'waiting-for-tree-loads');
+    await withDeadline(Promise.all([pane.itemsView.waitForLoad(), pane.collectionsView.waitForLoad()]),
+      'second window native tree load promises');
+    await until(() => {
+      rrReadiness = readinessSnapshot(window, 'waiting-for-visible-library-tab');
+      return rrReadiness.visibleTabCount > 0;
+    }, 'second window visible React library tab');
+    check(!window.closed, 'second window must remain open after native UI loads');
+    rrReadiness = readinessSnapshot(window, 'ready');
+  } catch (error) {
+    rrReadiness = readinessSnapshot(window, rrReadiness?.stage);
+    error.message += `; readiness=${JSON.stringify(rrReadiness)}`;
+    throw error;
+  }
 }
 
 /** Verify the production addon's actual HTTPS manifest through Zotero's checker. @param {string} id production addon id. @param {string} url published update manifest. @returns {Promise<void>} */
@@ -98,6 +158,7 @@ async function runTests() {
   Zotero.openMainWindow();
   const second = await until(() => Zotero.getMainWindows().find(window => window !== first), 'second real main window');
   await until(() => current.windows.has(second), 'second window registration');
+  await waitForWindowReady(second);
   check(second !== first && !second.closed, 'second window is not a distinct open window');
   check(Zotero.ReferenceRelationships === current, 'opening a window replaced the singleton');
   checkRunning(current);
@@ -115,6 +176,14 @@ async function runTests() {
   checkStoppedReference(original);
   check(await AddonManager.getAddonByID(preference('id')) === null, 'uninstalled XPI remains in AddonManager');
   rrChecks.push('uninstall');
+
+  const shutdownAddon = await AddonManager.installTemporaryAddon(Zotero.File.pathToFile(preference('xpi')));
+  const shutdownRuntime = await until(() => Zotero.ReferenceRelationships, 'reinstall before application shutdown');
+  check(shutdownAddon.isActive, 'reinstalled XPI must remain enabled for application shutdown');
+  checkRunning(shutdownRuntime);
+  checkStoppedReference(original);
+  checkStoppedReference(current);
+  rrChecks.push('shutdown-enabled');
 }
 
 /** Confirm an earlier generation stays inert. @param {object} runtime @returns {void} */
@@ -127,6 +196,7 @@ async function finish(error) {
   const result = {
     ok: !error, checks: rrChecks, error: error ? `${error.message}\n${error.stack}` : null,
     profile: Zotero.Profile.dir, data: Zotero.DataDirectory.dir, zoteroVersion: Zotero.version,
+    readiness: rrReadiness,
   };
   if (error) Zotero.logError(error);
   await IOUtils.writeUTF8(preference('result'), JSON.stringify(result, null, 2));
@@ -143,4 +213,3 @@ function reportFailure(error) {
   Zotero.logError(error);
   Services.startup.quit(Services.startup.eForceQuit);
 }
-

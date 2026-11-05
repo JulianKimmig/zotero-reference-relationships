@@ -30,11 +30,12 @@ function onMainWindowLoad({ window }) {
 }
 
 /**
- * Release a closing main window without affecting the shared runtime.
+ * Release a closing window, including callbacks delivered after shutdown.
  * @param {{window: Window}} event Zotero's main-window unload event.
  * @returns {void}
  */
 function onMainWindowUnload({ window }) {
+  if (!relationshipRuntime) return;
   relationshipRuntime.removeWindow(window);
 }
 

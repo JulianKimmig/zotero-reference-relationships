@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const controllerTemplate = fileURLToPath(new URL('../tests/controller/', import.meta.url));
-export const requiredChecks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall'];
+export const requiredChecks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall', 'shutdown-enabled'];
 export const expectedZoteroVersion = '10.0.7';
 
 /** Create dedicated directories and a controller bound to a real endpoint. @param {string} xpi @param {string} id @param {string} version @param {string} updateURL actual HTTPS manifest. @returns {Promise<object>} session paths. */
@@ -30,7 +30,12 @@ export async function createSession(xpi, id, version, updateURL) {
     'extensions.startupScanScopes': 15,
     'extensions.zotero.useDataDir': true,
     'extensions.zotero.dataDir': session.data,
-    'extensions.zotero.firstRun': false,
+    'extensions.zotero.firstRun2': false,
+    'extensions.zotero.firstRunGuidance': false,
+    'extensions.zotero.firstRun.skipFirefoxProfileAccessCheck': true,
+    'extensions.zoteroOpenOfficeIntegration.skipInstallation': true,
+    'extensions.zoteroWinWordIntegration.skipInstallation': true,
+    'extensions.zoteroMacWordIntegration.skipInstallation': true,
     'extensions.zotero.automaticScraperUpdates': false,
     'extensions.zotero.sync.autoSync': false,
     'app.update.auto': false,
@@ -65,4 +70,11 @@ export function validateResult(result, session) {
     throw new Error(`Expected Zotero ${expectedZoteroVersion}; received ${result.zoteroVersion}`);
   }
   return result;
+}
+
+/** Reject the observed plugin race in the completed native process log. @param {string} log complete stdout/stderr. @returns {void} */
+export function validateRuntimeLog(log) {
+  if (/TypeError:[^\r\n]*relationshipRuntime is undefined/.test(log)) {
+    throw new Error('Plugin shutdown failed: late window unload accessed a stopped relationshipRuntime');
+  }
 }

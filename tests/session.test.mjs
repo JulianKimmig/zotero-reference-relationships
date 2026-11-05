@@ -53,21 +53,21 @@ test('reports a driver failure with its runtime diagnostic', () => {
 });
 
 test('rejects a runtime result pointing outside the dedicated fixture', () => {
-  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall'];
+  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall', 'shutdown-enabled'];
   assert.throws(() => validateResult({ ok: true, checks, profile: '/personal', data: '/personal' },
     { profile: '/dedicated/profile', data: '/dedicated/data' }), /isolation|profile/);
 });
 
 test('rejects a runtime version other than the verified Zotero 10.0.7', () => {
   const session = { profile: '/dedicated/profile', data: '/dedicated/data' };
-  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall'];
+  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall', 'shutdown-enabled'];
   assert.throws(() => validateResult({ ok: true, checks, ...session, zoteroVersion: '10.0.8' }, session),
     /Expected Zotero 10.0.7/);
 });
 
 test('accepts all lifecycle checks only for the dedicated fixture and verified runtime', () => {
   const session = { profile: '/dedicated/profile', data: '/dedicated/data' };
-  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall'];
+  const checks = ['isolation', 'updates-empty', 'startup', 'disable', 'reenable', 'window-open', 'window-close', 'uninstall', 'shutdown-enabled'];
   const result = { ok: true, checks, ...session, zoteroVersion: '10.0.7' };
   assert.equal(validateResult(result, session), result);
 });
