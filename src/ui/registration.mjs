@@ -4,10 +4,10 @@ import { RelationshipView } from './view.mjs';
 
 /**
  * Register official native extension points, with explicit teardown and shared application.
- * @param {object} options Actual {Zotero,id,rootURI,application,gateway,report} resources.
+ * @param {object} options Actual {Zotero,id,rootURI,application,gateway,report,openRules,onNativeChange} resources.
  * @returns {object} Window lifecycle hooks and owned section identifier.
  */
-export function registerInterface({ Zotero, id, rootURI, application, gateway, report }) {
+export function registerInterface({ Zotero, id, rootURI, application, gateway, report, openRules, onNativeChange }) {
   const views = new Map(), windows = new Set(), dialogs = new Set();
   let stopped = false;
   const paneID = 'reference-relationships', icon = rootURI + 'src/ui/relationships.svg';
@@ -22,7 +22,7 @@ export function registerInterface({ Zotero, id, rootURI, application, gateway, r
     sidenav: { l10nID: 'reference-relationships-sidenav', icon },
     onInit(props) {
       views.set(props.body, new RelationshipView({ body: props.body, window: props.doc.defaultView,
-        Zotero, app: application, gateway, dialogs, refresh: props.refresh, report }));
+        Zotero, app: application, gateway, dialogs, refresh: props.refresh, report, openRules }));
     },
     onDestroy({ body }) { const view = views.get(body); if (view) view.dispose(); views.delete(body); },
     onItemChange(props) { const enabled = eligible(props); props.setEnabled(enabled); views.get(props.body)?.select(enabled ? props.item : null); },
@@ -54,6 +54,7 @@ export function registerInterface({ Zotero, id, rootURI, application, gateway, r
     notify() {
       if (stopped) return;
       application.invalidateAll();
+      onNativeChange();
       for (const view of views.values()) if (view.item && !view.disposed) view.nativeChange();
     },
   }, ['item', 'group'], 'reference-relationships-ui');

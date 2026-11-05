@@ -3,10 +3,12 @@ import { element, button, metadataText } from './dom.mjs';
 import { RelationshipEditor } from './editor.mjs';
 import { CatalogEditor } from './catalog-editor.mjs';
 import { check } from '../domain/values.mjs';
+import { ruleLabels } from './rule-controls.mjs';
+import { provenance, describeContributors } from './provenance.mjs';
 
 /** Own one native section's DOM and selection generation. */
 export class RelationshipView {
-  /** Bind actual section and shared application resources. @param {object} options {body,window,Zotero,app,gateway,dialogs,refresh,report}. */
+  /** Bind actual section and shared application resources. @param {object} options {body,window,Zotero,app,gateway,dialogs,refresh,report,openRules}. */
   constructor(options) {
     Object.assign(this, options); this.document = this.body.ownerDocument;
     this.generation = 0; this.disposed = false; this.editor = null; this.offset = 0;
@@ -89,6 +91,7 @@ export class RelationshipView {
     this.trace('read-start', generation);
     try {
       const context = await this.app.context(ref);
+      const t = await ruleLabels(this.document);
       let result = null;
       if (context.state === 'ready') result = await this.app.listRelationships(ref, 'both', null, { offset: this.offset, limit: 25 });
       const rows = result ? await Promise.all(result.relationships.map(async edge => {
@@ -98,13 +101,14 @@ export class RelationshipView {
       })) : [];
       if (!this.current(generation)) { this.trace('discard', generation); return; }
       this.trace('publish', generation);
-      this.context = context; this.root.dataset.rrState = context.state; this.root.setAttribute('aria-busy', 'false'); this.root.replaceChildren();
+      this.context = context; this.t = t; this.root.dataset.rrState = context.state; this.root.setAttribute('aria-busy', 'false'); this.root.replaceChildren();
       const add = button(this.document, 'Add relationship…', 'add', () => this.run(() => this.openEditor('create', null)), this.abort.signal);
       add.disabled = !context.editable || !['ready', 'uninitialized'].includes(context.state) || context.types.every(type => type.retired);
       this.root.append(add);
       const manage = button(this.document, 'Manage types…', 'manage-types', () => this.run(() => this.openCatalog()), this.abort.signal);
       manage.disabled = !context.editable || !['ready', 'uninitialized'].includes(context.state);
       this.root.append(manage);
+      this.root.append(button(this.document, t('manage'), 'manage-rules', () => this.run(() => this.openRules(ref.library)), this.abort.signal));
       if (context.state === 'uninitialized') this.root.append(element(this.document, 'p', {}, 'No relationships yet. Saving your first relationship starts this library.'));
       else if (context.state !== 'ready') this.root.append(element(this.document, 'p', { role: 'alert' }, `Relationship data is ${context.state}. Resolve this before making changes.`));
       if (!context.editable) this.root.append(element(this.document, 'p', {}, 'This reference or library is read-only.'));
@@ -140,11 +144,24 @@ export class RelationshipView {
     navigate.disabled = other.status !== 'active'; row.append(navigate);
     const text = metadataText(edge.metadata, type); if (text) row.append(element(this.document, 'p', {}, text));
     if (generated) row.append(element(this.document, 'p', {}, `${edge.supports.length} rule support${edge.supports.length === 1 ? '' : 's'}. Generated values follow their explicit roots and rules.`));
+    if (generated) row.append(button(this.document, this.t('explain'), 'explain', () => this.run(() => this.explain(row, edge)), this.abort.signal));
     for (const [mode, label, action] of manual ? [['edit', 'Edit', 'edit'], ['remove', 'Remove', 'remove']] : []) {
       const control = button(this.document, label, action, () => this.run(() => this.openEditor(mode, edge)), this.abort.signal);
       control.disabled = !this.context.editable; row.append(control);
     }
     this.list.append(row);
+  }
+
+  /** Explain actual current roots and rule versions, discarding responses after native selection/revision changes. @param {Element} row Owned relationship row. @param {object} edge Effective relationship. @returns {Promise<void>} */
+  async explain(row, edge) {
+    const existing = row.querySelector('[data-rr-provenance]'); if (existing) { existing.remove(); return; }
+    const generation = this.generation, state = await this.app.read(this.ref.library);
+    check(state.state === 'ready' && state.head === this.context.revision, 'Relationship data changed; refresh before explaining', 'conflict');
+    const descriptions = await describeContributors(this.app, [edge], [state.snapshot]);
+    if (!this.current(generation) || !row.isConnected) return;
+    const details = element(this.document, 'section', { 'data-rr-provenance': '' });
+    provenance({ document: this.document, parent: details, edge, snapshot: state.snapshot, descriptions, t: this.t, signal: this.abort.signal });
+    row.append(details);
   }
 
   /** Resolve original manual metadata before opening a draft; discard stale selection responses. @param {string} mode create/edit/remove. @param {object|null} edge Effective edge with manual authority, or null for creation. @returns {Promise<void>} Editor opened or stale result ignored. */

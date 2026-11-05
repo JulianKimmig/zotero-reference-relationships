@@ -6,9 +6,9 @@ var relationshipResource;
 /**
  * Create the shared service and register existing main windows.
  * @param {{id: string, version: string, rootURI: string}} addon Installed descriptor.
- * @returns {void} Completes synchronous lifecycle initialization.
+ * @returns {Promise<void>} Completes native UI and preference registration.
  */
-function startup({ id, version, rootURI }) {
+async function startup({ id, version, rootURI }) {
   if (Object.hasOwn(Zotero, 'ReferenceRelationships')) {
     throw new Error('Reference Relationships is already running');
   }
@@ -24,6 +24,8 @@ function startup({ id, version, rootURI }) {
     relationshipRuntime.addWindow(window);
   }
   Zotero.ReferenceRelationships = relationshipRuntime;
+  try { await controller.preferences.register(); }
+  catch (error) { shutdown(); throw error; }
 }
 
 /**

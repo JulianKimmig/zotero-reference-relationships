@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('ruleui:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-rule-preference-tests', Services.io.newURI(controllerRootURI));
+    const { rulePreferences } = ChromeUtils.importESModule('resource://rr-rule-preference-tests/rule-preferences.sys.mjs');
+    return rulePreferences(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('rulecmd:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);

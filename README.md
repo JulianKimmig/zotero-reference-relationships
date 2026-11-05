@@ -31,9 +31,26 @@ manual, generated and combined support; editing or removing a manual contributio
 preserves independent rule support. Generated-only rows follow their roots and
 rules and cannot be edited directly.
 
-The rule configuration interface is not available yet. The initial catalog does
-not enable inverse rules automatically; the Referencing type alone creates an
-explicit link.
+Use **Manage rules…** in the Relationships section, or open **Reference
+Relationships** in Zotero's preferences. Select the library, then create a rule
+with a stable ID, root type, matching type and output type. Conditions inspect
+the original manual relationship; output metadata copies selected root fields
+or uses typed constants. Preview the added, updated and removed relationships
+before saving. Existing rules can be edited, enabled, disabled or deleted with
+the same review. Cancel preserves the saved rules and relationships.
+
+For an inverse, select **Referencing** as both the root and matching type,
+**Referenced by** as output, and **Reverse source and target**. To copy Note
+metadata, choose **Copy root field** and select **note**. After saving the rule,
+`A referencing B` also produces `B referenced-by A`. The initial catalog enables
+no rules automatically. **Explain generated relationship…** shows the original
+manual relationship, producing rules and metadata contributions.
+
+Rules keep or reverse existing endpoints within one library. They do not run
+scripts or discover new endpoints. Changing a root or output type resets the
+form's conditions and mappings; select them again before previewing. If library
+data changes during editing, cancel and reopen the rule to review the latest
+version.
 
 The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
 

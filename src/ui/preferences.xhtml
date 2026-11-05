@@ -1,0 +1,12 @@
+<!-- Official preference fragment; only the trusted runtime bridge owns dynamic rule controls. -->
+<linkset xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+         xmlns:html="http://www.w3.org/1999/xhtml">
+  <html:link rel="localization" href="reference-relationships.ftl"/>
+</linkset>
+<groupbox xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul"
+          xmlns:html="http://www.w3.org/1999/xhtml"
+          id="reference-relationships-rule-preferences"
+          onload="event.waitUntil(Zotero.ReferenceRelationships.controller.preferences.mount(window, this.querySelector('[data-rr-preferences]')))"
+          onunload="Zotero.ReferenceRelationships?.controller.preferences.unmount(this.querySelector('[data-rr-preferences]'))">
+  <html:div data-rr-preferences=""/>
+</groupbox>
