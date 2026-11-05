@@ -73,3 +73,21 @@ test('classic scripts can use ambient contracts for ES modules while keeping the
   const module = await import(pathToFileURL(join(output, 'src', 'value.mjs')).href);
   assert.equal(module.value, 42);
 });
+
+test('native files included for editors still emit isolated classic entrypoints', async () => {
+  const root = await fixture();
+  await mkdir(join(root, 'tests', 'controller'), { recursive: true });
+  await writeFile(join(root, 'package.json'), '{"type":"module"}');
+  const configPath = join(root, 'tsconfig.json');
+  const config: { include: string[] } = JSON.parse(await readFile(configPath, 'utf8'));
+  config.include.push('bootstrap.ts', 'tests/**/*.ts');
+  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(join(root, 'tests', 'controller', 'bootstrap.ts'), '/** Independent controller. */\nfunction startup(): number { return 2; }\n');
+  const output = await compileProject(root);
+  for (const [entry, expected] of [['bootstrap.js', 1], ['tests/controller/bootstrap.js', 2]] as const) {
+    const scope: { startup?: () => number } = {};
+    runInNewContext(await readFile(join(output, entry), 'utf8'), scope);
+    assert.ok(scope.startup); assert.equal(scope.startup(), expected);
+  }
+  assert.equal((await import(pathToFileURL(join(output, 'src/value.mjs')).href)).value, 42);
+});

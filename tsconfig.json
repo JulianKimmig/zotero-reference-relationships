@@ -12,5 +12,5 @@
     "rewriteRelativeImportExtensions": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.mts", "scripts/**/*.mts", "tests/**/*.mts", "types/**/*.d.ts"]
+  "include": ["bootstrap.ts", "src/**/*.mts", "src/**/*.ts", "scripts/**/*.mts", "tests/**/*.mts", "tests/**/*.ts", "types/**/*.d.ts"]
 }
