@@ -73,3 +73,5 @@ reference-relationships-rule-unresolved-before = Native merge aliases are unreso
 reference-relationships-rule-select-original = Select this original for removal
 reference-relationships-rule-remove-selected = Review removal of selected originals
 reference-relationships-rule-confirm-removals = Confirm selected removals
+reference-relationships-rule-unavailable = Unavailable
+reference-relationships-rule-library-unavailable = This library is unavailable. Your draft values remain visible. Choose an available library to continue.

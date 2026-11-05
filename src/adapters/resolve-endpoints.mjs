@@ -8,12 +8,13 @@ const MAX_ALIAS_HOPS = 64;
 export function createEndpointInspector({ Zotero, library }) {
   check(!!Zotero && typeof library === 'function', 'Native endpoint resolver dependencies are required');
 
-  /** Describe a real terminal item or a known missing/ambiguous original. @param {object} original Valid original ItemRef. @param {object} owner Current native library/group. @param {object|null} item Resolved actual item or none. @param {string|null} unavailable Explicit missing/ambiguous state or null for actual item classification. @returns {object} {original,resolved,status,title,editable}. */
-  function description(original, owner, item, unavailable) {
+  /** Describe a real terminal item, loading native bibliographic title data before synchronous display access. @param {object} original Valid original ItemRef. @param {object} owner Current native library/group. @param {object|null} item Resolved actual item or none. @param {string|null} unavailable Explicit unavailable state or null for actual item classification. @returns {Promise<object>} {original,resolved,status,title,editable}. */
+  async function description(original, owner, item, unavailable) {
     if (unavailable) {
       const titles = { missing: 'Missing', ambiguous: 'Ambiguous', cyclic: 'Cyclic alias for', 'alias-limit': 'Alias lookup limit for' };
       return { original, resolved: null, status: unavailable, title: `${titles[unavailable]} reference ${original.key}`, editable: false };
     }
+    if (item.isRegularItem()) await item.loadDataType('itemData');
     const status = !item.isRegularItem() ? 'unsupported' : item.deleted ? 'trashed' : 'active';
     return { original, resolved: { library: original.library, key: item.key }, status, title: item.getDisplayTitle(),
       editable: status === 'active' && owner.editable && !owner.archived && item.isEditable() };

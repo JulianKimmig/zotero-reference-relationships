@@ -141,7 +141,10 @@ export async function rulePreferences(job, api) {
   check(root.dataset.rrState === 'disposed', 'Removed preference controls still advertise ready authority');
   check(!root.querySelector('[data-rr-rule-editor]') && !root.querySelector('[data-rr-action="new-rule"]'), 'Disabled runtime retained owned preference controls');
   await addon.enable();
-  const reloaded = await preferences(api);
+  let reloaded;
+  try { reloaded = await preferences(api); }
+  catch (error) { error.message += '; stage=after-native-enable'; throw error; }
   check(JSON.stringify((await Zotero.ReferenceRelationships.application.read('self')).snapshot) === snapshot, 'Preference re-enable altered authority');
-  reloaded.window.close(); return { actualRestartedPreferences: true, definitionsPreserved: true, openPreferenceDisableReenable: true };
+  reloaded.window.close(); return { actualRestartedPreferences: true, definitionsPreserved: true, openPreferenceDisableReenable: true,
+    registrationsObservedImmediatelyAfterEnable: reloaded.initialRegistrationCount };
 }

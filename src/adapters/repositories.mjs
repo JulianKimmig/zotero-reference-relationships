@@ -18,8 +18,9 @@ export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder
   /** Compose the requested native transaction boundary and its application guard. @param {string} scope Library. @param {Function|null} guard Required writer guard or null for reads. @param {boolean} event Independent event boundary. @returns {GraphRepository} Real repository. */
   function construct(scope, guard, event) {
     check(guard === null || typeof guard === 'function', 'Explicit application guard or null is required');
-    if (!transports.has(scope)) {
-      transports.set(scope, createNativeTransport({ Zotero, DOMParser, libraryID: gateway.library(scope).libraryID }));
+    const owner = gateway.library(scope), identity = Zotero.Libraries.get(owner.libraryID);
+    if (!transports.has(scope) || transports.get(scope).identity !== identity) {
+      transports.set(scope, createNativeTransport({ Zotero, DOMParser, libraryID: owner.libraryID }));
     }
     const base = transports.get(scope);
     const transport = guard === null ? base : { ...base,

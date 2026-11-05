@@ -5,6 +5,7 @@ import { element } from './dom.mjs';
 import { ruleControl, ruleButton } from './rule-controls.mjs';
 import { ruleDefinition } from './provenance.mjs';
 import { RuleEditor } from './rule-editor.mjs';
+import { libraryChoices } from './library-choices.mjs';
 
 /** Own library selection, authority and editor lifetimes in one native preferences pane. */
 export class RulePreferences {
@@ -14,10 +15,9 @@ export class RulePreferences {
     this.abort = new this.window.AbortController(); this.generation = 0; this.disposed = false; this.editor = null;
     this.root.style.cssText = 'display:grid;gap:10px;max-width:100%;font:inherit';
     this.root.replaceChildren(element(this.document, 'p', {}, this.t('language')));
-    const choices = this.Zotero.Libraries.getAll().filter(library => ['user', 'group'].includes(library.libraryType))
-      .map(library => [this.gateway.scope(library.libraryID), library.name]);
+    this.library = 'self';
     this.librarySelect = ruleControl({ document: this.document, parent: this.root, label: this.t('library'), name: 'library',
-      value: 'self', choices, signal: this.abort.signal,
+      value: 'self', choices: [], signal: this.abort.signal,
       onChange: event => { if (event.type === 'change') this.run(() => this.load(this.librarySelect.value)); } });
     this.librarySelect.setAttribute('data-rr-library', '');
     this.message = element(this.document, 'p', { role: 'status' }); this.error = element(this.document, 'p', { role: 'alert' });
@@ -26,29 +26,53 @@ export class RulePreferences {
     this.root.append(this.message, this.newButton, this.list, this.formBody, this.error);
   }
 
+  /** Refresh native names/permissions and lock unavailable scopes without discarding visible draft values. @param {string} library Exact requested scope. @returns {boolean} Whether a native owner currently exists. */
+  availability(library) {
+    const owner = libraryChoices({ Zotero: this.Zotero, gateway: this.gateway, document: this.document,
+      select: this.librarySelect, selected: library, t: this.t });
+    this.editable = !!owner && owner.editable && !owner.archived; this.newButton.disabled = !this.editable;
+    for (const control of this.list.querySelectorAll('button')) control.disabled = !this.editable;
+    if (this.editor) this.editor.setWritable(this.editable);
+    if (owner) return true;
+    this.generation++; if (this.listAbort) this.listAbort.abort();
+    this.root.dataset.rrLibrary = library; this.root.dataset.rrState = 'unavailable'; this.root.setAttribute('aria-busy', 'false');
+    this.message.textContent = ''; this.error.textContent = this.t('library-unavailable'); return false;
+  }
+
   /** Run native work while exposing failures in the current connected preferences pane. @param {Function} action Async action. @returns {void} */
   run(action) {
     Promise.resolve().then(action).catch(error => {
       this.report(error);
-      if (!this.disposed) { this.root.dataset.rrState = 'error'; this.root.setAttribute('aria-busy', 'false'); this.error.textContent = error.message; }
+      if (!this.disposed) {
+        this.editable = false; this.newButton.disabled = true;
+        for (const control of this.list.querySelectorAll('button')) control.disabled = true;
+        if (this.editor) this.editor.setWritable(false);
+        this.root.dataset.rrState = 'error'; this.root.setAttribute('aria-busy', 'false'); this.error.textContent = error.message;
+      }
     });
   }
 
   /** Load an explicit library and discard its previous unsaved editor; unavailable authority never becomes an empty graph. @param {string} library Portable scope. @returns {Promise<void>} */
   async load(library) {
     if (this.editor) this.editor.dispose(); this.editor = null;
-    this.gateway.library(library);
-    check([...this.librarySelect.options].some(option => option.value === library), 'Library is absent from rule preferences', 'endpoint');
     const generation = ++this.generation;
     if (this.listAbort) this.listAbort.abort(); this.listAbort = new this.window.AbortController();
-    this.library = library; this.librarySelect.value = library; this.newButton.disabled = true;
+    this.library = library;
+    if (!this.availability(library)) return;
+    this.newButton.disabled = true;
     this.root.dataset.rrState = 'loading'; this.root.setAttribute('aria-busy', 'true'); this.error.textContent = ''; this.list.replaceChildren();
-    const state = await this.app.read(library);
+    let state;
+    try { state = await this.app.read(library); }
+    catch (error) {
+      if (this.disposed || generation !== this.generation || !this.root.isConnected) return;
+      if (!this.availability(library)) return;
+      throw error;
+    }
     if (this.disposed || generation !== this.generation || !this.root.isConnected) return;
+    if (!this.availability(library)) return;
     check(['ready', 'uninitialized'].includes(state.state), `Relationship authority is ${state.state}; rule editing is unavailable`, 'conflict');
     this.snapshot = state.state === 'ready' ? state.snapshot : initialGraph(library);
     this.revision = state.state === 'ready' ? state.head : null;
-    const owner = this.gateway.library(library); this.editable = owner.editable && !owner.archived;
     this.message.textContent = !this.editable ? this.t('read-only') : !this.snapshot.rules.length ? this.t('empty') : '';
     this.newButton.disabled = !this.editable;
     for (const rule of this.snapshot.rules) {
@@ -75,7 +99,15 @@ export class RulePreferences {
   async finishEditor() { if (this.editor) this.editor.dispose(); this.editor = null; await this.load(this.library); }
 
   /** Invalidate reviews on actual item/group notifications; idle panes reload their library. @returns {void} */
-  nativeChange() { if (this.disposed) return; if (this.editor) this.editor.invalidate(); else this.run(() => this.load(this.library)); }
+  nativeChange() {
+    if (this.disposed) return;
+    if (!this.editor) { this.run(() => this.load(this.library)); return; }
+    this.editor.invalidate();
+    if (this.availability(this.library)) {
+      this.root.dataset.rrState = 'ready'; this.error.textContent = '';
+      this.message.textContent = this.editable ? '' : this.t('read-only');
+    }
+  }
 
   /** Abort all listeners, remove only owned DOM and discard late authority responses. @returns {void} */
   dispose() {

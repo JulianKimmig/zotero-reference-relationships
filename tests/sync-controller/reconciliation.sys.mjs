@@ -12,6 +12,23 @@ async function alias(Zotero, subject, uri) {
 
 /** Run one real native lifecycle foundation phase; application/UI integration has separate remaining gates. @param {object} job Phase/artifact/saved keys. @param {object} api Actual platform. @returns {Promise<object>} Verified module behavior. */
 export async function reconciliation(job, api) {
+  if (job.action.startsWith('reconcile:libraries-')) {
+    if (job.action === 'reconcile:libraries-pending') {
+      const { reconciliationLibraryPending } = await import('./reconciliation-library-pending.sys.mjs');
+      return reconciliationLibraryPending(job, api);
+    }
+    if (job.action === 'reconcile:libraries-copy') {
+      const { reconciliationLibraryCopy } = await import('./reconciliation-library-copy.sys.mjs');
+      return reconciliationLibraryCopy(job, api);
+    }
+    const { reconciliationLibraryRemoval, reconciliationLibraryDisabled } = await import('./reconciliation-library-removal.sys.mjs');
+    if (job.action === 'reconcile:libraries-remove') return reconciliationLibraryRemoval(job, api);
+    if (job.action === 'reconcile:libraries-disabled') return reconciliationLibraryDisabled(job, api);
+    check(job.action === 'reconcile:libraries-restart', 'Unknown library lifecycle phase');
+    await resources(job, api);
+    const { librariesPreserved } = await import('./library-fixtures.sys.mjs');
+    await librariesPreserved(api, job); return { restarted: true, unrelatedAuthorityPreserved: true };
+  }
   if (job.action === 'reconcile:bulk-edges') {
     const { reconciliationBulkEdges } = await import('./reconciliation-bulk-edges.sys.mjs');
     return reconciliationBulkEdges(job, api);

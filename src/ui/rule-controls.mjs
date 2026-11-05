@@ -9,7 +9,7 @@ const keys = ['library', 'new', 'edit', 'delete', 'id', 'enabled', 'root-type', 
   'read-only', 'empty', 'support', 'manual', 'version', 'explain', 'manage', 'root-assertion', 'delete-help', 'retired',
   'repair', 'originals', 'conflicted-before', 'complete-after', 'contribution', 'edit-original', 'remove-original',
   'close-repairs', 'stale-repairs', 'no-originals', 'original-keys', 'choose-contribution', 'conflict-field', 'unresolved-before',
-  'select-original', 'remove-selected', 'confirm-removals'];
+  'select-original', 'remove-selected', 'confirm-removals', 'unavailable', 'library-unavailable'];
 
 /** Resolve required Fluent messages without substituting untranslated defaults. @param {Document} document Native localized document. @returns {Promise<Function>} Synchronous label lookup. */
 export async function ruleLabels(document) {

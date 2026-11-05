@@ -14,6 +14,7 @@ export class RuleEditor {
     this.library = view.library; this.baseRevision = view.revision; this.before = view.snapshot;
     this.generation = 0; this.disposed = false; this.review = null;
     this.abort = new view.window.AbortController(); this.previewAbort = null;
+    this.writable = true; this.lockedControls = new Map(); this.applyingControls = null;
     const { document, t } = view, owner = { document, t, signal: this.abort.signal };
     this.root = element(document, 'section', { 'data-rr-rule-editor': '', 'aria-busy': 'false' });
     this.root.style.cssText = 'display:grid;gap:8px;border-block-start:1px solid currentColor;padding-block:12px';
@@ -44,8 +45,26 @@ export class RuleEditor {
     if (this.impact) this.impact.dispose(); this.impact = null; this.details.replaceChildren();
   }
 
+  /** Preserve draft values while revoking mutation access, restoring semantic control states only after permission returns. @param {boolean} writable Current native owner permission. @returns {void} */
+  setWritable(writable) {
+    this.writable = writable;
+    if (!writable) {
+      this.invalidate();
+      for (const control of this.root.querySelectorAll('input,button,textarea,select')) {
+        if (control.dataset.rrAction === 'cancel-rule') continue;
+        if (!this.lockedControls.has(control)) this.lockedControls.set(control,
+          this.applyingControls?.has(control) ? this.applyingControls.get(control) : control.disabled);
+        control.disabled = true;
+      }
+    } else if (this.applyingControls === null) {
+      for (const [control, disabled] of this.lockedControls) if (control.isConnected) control.disabled = disabled;
+      this.lockedControls.clear(); this.save.disabled = !this.review;
+    }
+  }
+
   /** Build and review the exact captured command; no writes occur during configuration. @returns {Promise<void>} */
   async preview() {
+    check(this.writable, 'This library is not currently writable', 'permission');
     this.invalidate(); this.error.textContent = '';
     const generation = this.generation, pending = {}; this.pending = pending;
     this.previewAbort = new this.view.window.AbortController(); const signal = this.previewAbort.signal;
@@ -68,16 +87,20 @@ export class RuleEditor {
 
   /** Publish only the reviewed command while locking the form and library selector. @returns {Promise<void>} */
   async apply() {
-    check(!!this.review && !this.disposed, 'Preview this rule change before saving');
-    const controls = [...this.root.querySelectorAll('input,button,textarea,select'), this.view.librarySelect].map(control => [control, control.disabled]);
+    check(!!this.review && !this.disposed && this.writable, 'Preview this rule change before saving');
+    const controls = new Map([...this.root.querySelectorAll('input,button,textarea,select'), this.view.librarySelect].map(control => [control, control.disabled]));
+    this.applyingControls = controls;
     for (const [control] of controls) control.disabled = true;
     try { await this.view.app.applyReviewed(this.review); if (!this.disposed) await this.view.finishEditor(); }
-    finally { for (const [control, disabled] of controls) if (control.isConnected) control.disabled = disabled; }
+    finally {
+      for (const [control, disabled] of controls) if (control.isConnected) control.disabled = disabled;
+      this.applyingControls = null; if (!this.disposed) this.setWritable(this.view.editable);
+    }
   }
 
   /** Abort owned form/review listeners and make all late results inert. @returns {void} */
   dispose() {
     if (this.disposed) return; this.disposed = true; this.invalidate(); this.abort.abort();
-    if (this.form) this.form.dispose(); this.root.remove();
+    if (this.form) this.form.dispose(); this.lockedControls.clear(); this.root.remove();
   }
 }

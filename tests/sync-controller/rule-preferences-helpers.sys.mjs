@@ -4,10 +4,13 @@ import { checked } from './catalog-helpers.sys.mjs';
 
 export const paneID = 'reference-relationships-rules';
 
-/** Open Zotero's official preferences, waiting for the installed fragment to mount. @param {object} api Actual platform. @param {string} library Portable scope. @returns {Promise<object>} Real window/root. */
+/** Open Zotero's official preferences after registration and fragment mounting. @param {object} api Actual platform. @param {string} library Portable scope. @returns {Promise<object>} Real window/root and registration count observed before waiting. */
 export async function preferences(api, library = 'self') {
   const { Zotero } = api;
-  check(Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length === 1, 'Official rule preferences pane is not registered exactly once');
+  const initialRegistrationCount = Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length;
+  await until(Zotero, () => Zotero.PreferencePanes.pluginPanes.some(pane => pane.id === paneID), 'official rule preference registration');
+  const count = Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length;
+  check(count === 1, `Official rule preferences pane is not registered exactly once: ${JSON.stringify({ count, runtime: Zotero.ReferenceRelationships?.state })}`);
   const window = Zotero.Utilities.Internal.openPreferences(paneID);
   const root = await until(Zotero, () => {
     const root = window.document.querySelector('[data-rr-preferences]');
@@ -19,7 +22,7 @@ export async function preferences(api, library = 'self') {
     await until(Zotero, () => root.dataset.rrState === 'ready' && root.dataset.rrLibrary === library, 'selected preference library');
   }
   check(root.getBoundingClientRect().width > 0 && root.getBoundingClientRect().height > 0, 'Official preferences are not visible');
-  return { window, root };
+  return { window, root, initialRegistrationCount };
 }
 
 /** Open an actual existing rule or a blank definition. @param {object} api Native API. @param {Element} root Preference root. @param {string|null} id Existing identity. @returns {Promise<Element>} Real editor. */
