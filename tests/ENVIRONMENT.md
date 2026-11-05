@@ -15,6 +15,7 @@ ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero npm r
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/feasibility.mjs /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/publication.mjs /absolute/test-config.json
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/ui.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/catalog.mjs /absolute/test-config.json
 ```
 
 Build creates a fresh production-only XPI in /tmp; it refuses overwriting an existing output and rejects missing/non-HTTPS update URLs. The real configured endpoint is https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json, published manually by the user. No agent push is part of this workflow.
@@ -45,6 +46,13 @@ and verifies read-only UI and application rejection without authority changes.
 Existing signed personal relationship authority is preserved. Repeating this
 command creates a separate anonymous UI fixture; retain both result directories
 when validating the two-fixture journey requirement.
+
+The catalog runner uses a separate fresh anonymous client to create custom type
+and field definitions through actual native controls, persist all five metadata
+kinds, rename/retire the referenced type, reject invalid/stale edits, restart and
+review a destructive metadata migration. Signed B1 independently verifies real
+read-only catalog controls and publication denial. It preserves existing signed
+authority. The production package excludes both test controllers.
 
 Publication writes `progress.json` after each successful native job and `result.json` only at full completion. Resume an interrupted suite with `node scripts/sync/publication.mjs /absolute/test-config.json --resume /absolute/evidence-root` only with the same fixture semantics and controller revision. A process crash after a mutation is a failed job even if its private result says success: inspect it and verify its saved keys after a clean restart before recording completion; do not blindly replay the mutation. Missing dependencies stay pending, multiple complete heads stay conflict, and malformed or unknown envelopes fail explicitly.
 

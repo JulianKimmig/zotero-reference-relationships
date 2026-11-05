@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('catalog:')) {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-catalog-tests', Services.io.newURI(controllerRootURI));
+    const { catalogJourney } = ChromeUtils.importESModule('resource://rr-catalog-tests/catalog-journey.sys.mjs');
+    return catalogJourney(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('ui:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);

@@ -1,6 +1,7 @@
 /** Item-pane rendering with revision-aware actions and per-selection asynchronous cancellation. */
 import { element, button, metadataText } from './dom.mjs';
 import { RelationshipEditor } from './editor.mjs';
+import { CatalogEditor } from './catalog-editor.mjs';
 
 /** Own one native section's DOM and selection generation. */
 export class RelationshipView {
@@ -100,6 +101,9 @@ export class RelationshipView {
       const add = button(this.document, 'Add relationship…', 'add', () => this.run(() => this.openEditor('create', null)), this.abort.signal);
       add.disabled = !context.editable || !['ready', 'uninitialized'].includes(context.state) || context.types.every(type => type.retired);
       this.root.append(add);
+      const manage = button(this.document, 'Manage types…', 'manage-types', () => this.run(() => this.openCatalog()), this.abort.signal);
+      manage.disabled = !context.editable || !['ready', 'uninitialized'].includes(context.state);
+      this.root.append(manage);
       if (context.state === 'uninitialized') this.root.append(element(this.document, 'p', {}, 'No relationships yet. Saving your first relationship starts this library.'));
       else if (context.state !== 'ready') this.root.append(element(this.document, 'p', { role: 'alert' }, `Relationship data is ${context.state}. Resolve this before making changes.`));
       if (!context.editable) this.root.append(element(this.document, 'p', {}, 'This reference or library is read-only.'));
@@ -143,6 +147,12 @@ export class RelationshipView {
   openEditor(mode, edge) {
     if (this.editor) this.editor.dispose();
     this.editor = new RelationshipEditor({ view: this, mode, edge }); this.root.append(this.editor.root);
+  }
+
+  /** Open a selected-library catalog draft without persisting proposed seed data. @returns {void} */
+  openCatalog() {
+    if (this.editor) this.editor.dispose();
+    this.editor = new CatalogEditor(this); this.root.append(this.editor.root);
   }
 
   /** Cancel or complete editing, then refresh via the supported section callback. @returns {void} */

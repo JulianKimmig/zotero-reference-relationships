@@ -3,6 +3,7 @@ import { check, exact, identifier, jsonCopy } from '../domain/values.mjs';
 import { validateGraph, validateItemRef } from '../domain/graph-contract.mjs';
 import { initialGraph } from './seed.mjs';
 import { changesBetween, explicitEdges } from './changes.mjs';
+import { proposeTypeChange, validateTypeTransition } from './catalog.mjs';
 
 /** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
 function copyState(state) {
@@ -169,6 +170,15 @@ export class RelationshipApplication {
     return { command: { kind: 'replace', snapshot: graph }, expectedRevision: state.state === 'ready' ? state.head : null };
   }
 
+  /** Propose a versioned catalog edit and explicit metadata migration without writes. @param {object} input Exact {library,kind,type,migration}. @returns {Promise<object>} Detached replacement command and expected revision. */
+  async manageTypes(input) {
+    this.#active();
+    const change = jsonCopy(input); exact(change, ['library', 'kind', 'type', 'migration']);
+    const { library, ...definition } = change, state = await this.#current(library);
+    const snapshot = proposeTypeChange(this.#base(state, library), definition, this.#now());
+    return { command: { kind: 'replace', snapshot }, expectedRevision: state.state === 'ready' ? state.head : null };
+  }
+
   /**
    * Validate and review detached authority against a fresh ready head or explicit initialization.
    * @param {object} command Exact {kind:'replace',snapshot}.
@@ -184,6 +194,7 @@ export class RelationshipApplication {
     check((state.state === 'ready' && state.head === expectedRevision)
       || (state.state === 'uninitialized' && expectedRevision === null), 'Authority revision changed; review again', 'conflict');
     const current = this.#base(state, snapshot.library);
+    validateTypeTransition(current, snapshot);
     check(!current.rules.some(rule => rule.enabled) && !snapshot.rules.some(rule => rule.enabled),
       'This build supports explicit relationships; rule evaluation is not available yet');
     const changeSet = changesBetween(current, snapshot);

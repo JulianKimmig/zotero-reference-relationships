@@ -11,14 +11,23 @@ Cancel discards the draft. Incoming and outgoing rows provide navigation, editin
 and removal; removal requires confirmation. Self-links and cross-library links
 are rejected. Read-only libraries can be viewed but cannot be edited.
 
+Use **Manage types…** in the Relationships section to create or edit types and
+metadata fields. Fields support text, numbers, booleans, dates and enum options,
+with optional or required values. Type and field IDs stay fixed when labels change.
+Retire a type to prevent new use while keeping existing relationships readable.
+
+Removing fields, changing value kinds, requiring values or narrowing enum options
+requires **Review metadata migration…**. Review the old values and typed replacements,
+then preview and save the change. Cancel preserves the catalog and existing data.
+
 Relationships are stored as immutable standalone Zotero notes and use native
 library synchronization. Preserve these plugin-managed notes: editing or deleting
 them can make relationship data unavailable. Conflicting or incomplete generations
 block changes until resolved. Native reference fields, ordinary notes and Zotero's
 Related links retain their separate behavior.
 
-Custom type definitions, automatic inverse relationships and custom rules are
-not available yet. Creating Referencing currently creates only that explicit link.
+Automatic inverse relationships and custom rules are not available yet.
+Creating Referencing currently creates only that explicit link.
 
 The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
 
