@@ -27,7 +27,7 @@ export function explicitEdges(snapshot) { return project(validateGraph(snapshot)
  * @param {string} identity Stable field, id or key.
  * @returns {object} Exact {added,updated,removed}, each ordered by identity.
  */
-function delta(before, after, identity) {
+export function entityDelta(before, after, identity) {
   const old = new Map(before.map(value => [value[identity], value]));
   const next = new Map(after.map(value => [value[identity], value]));
   const result = { added: [], updated: [], removed: [] };
@@ -52,7 +52,7 @@ function delta(before, after, identity) {
 export function changesBetween(before, after) {
   const current = validateGraph(before), proposed = validateGraph(after);
   check(current.library === proposed.library, 'Cannot review graphs from different libraries');
-  return { assertions: delta(current.assertions, proposed.assertions, 'id'),
-    types: delta(current.types, proposed.types, 'id'), rules: delta(current.rules, proposed.rules, 'id'),
-    derived: delta(evaluateGraph(current).relationships, evaluateGraph(proposed).relationships, 'key'), diagnostics: [] };
+  return { assertions: entityDelta(current.assertions, proposed.assertions, 'id'),
+    types: entityDelta(current.types, proposed.types, 'id'), rules: entityDelta(current.rules, proposed.rules, 'id'),
+    derived: entityDelta(evaluateGraph(current).relationships, evaluateGraph(proposed).relationships, 'key'), diagnostics: [] };
 }

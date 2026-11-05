@@ -12,6 +12,18 @@ async function alias(Zotero, subject, uri) {
 
 /** Run one real native lifecycle foundation phase; application/UI integration has separate remaining gates. @param {object} job Phase/artifact/saved keys. @param {object} api Actual platform. @returns {Promise<object>} Verified module behavior. */
 export async function reconciliation(job, api) {
+  if (job.action.startsWith('reconcile:repair-ui')) {
+    const { reconciliationRepairUI } = await import('./reconciliation-repair-ui.sys.mjs');
+    return reconciliationRepairUI(job, api);
+  }
+  if (job.action === 'reconcile:ui-binding') {
+    const { reconciliationUI } = await import('./reconciliation-ui.sys.mjs');
+    return reconciliationUI(job, api);
+  }
+  if (job.action.startsWith('reconcile:application')) {
+    const { applicationReconciliation } = await import('./application-reconciliation.sys.mjs');
+    return applicationReconciliation(job, api);
+  }
   const { Zotero } = api, production = await resources(job, api);
   check(typeof production.gateway.resolve === 'function', 'Production native endpoint resolver is unavailable');
   if (job.action === 'reconcile:identity-inspect-account') {

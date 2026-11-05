@@ -5,6 +5,7 @@ import { initialGraph } from '../application/seed.mjs';
 import { element, button, metadataText } from './dom.mjs';
 import { catalogForm } from './catalog-form.mjs';
 import { migrationForms } from './catalog-migration.mjs';
+import { projectionReview } from './projection-review.mjs';
 
 /** Own one selected-library catalog draft and its native DOM listeners. */
 export class CatalogEditor {
@@ -42,7 +43,10 @@ export class CatalogEditor {
   }
 
   /** Invalidate a review on edits or native notifications while retaining current inputs. @returns {void} */
-  invalidate() { this.generation++; this.review = null; this.save.disabled = true; this.details.replaceChildren(); }
+  invalidate() {
+    this.generation++; this.review = null; this.save.disabled = true;
+    if (this.conflictImpact) this.conflictImpact.dispose(); this.conflictImpact = null; this.details.replaceChildren();
+  }
 
   /** Discard migration controls when their defining schema changes. @returns {void} */
   changed() {
@@ -105,6 +109,7 @@ export class CatalogEditor {
       this.details.append(element(document, 'p', {}, `${before.source.key} → ${before.target.key}: Before: ${metadataText(before.metadata, old)}; After: ${metadataText(after.metadata, next)}`));
     }
     if (!this.details.childElementCount) this.details.append(element(document, 'p', {}, 'No catalog or metadata changes.'));
+    if (review.changeSet.derived === null) this.conflictImpact = projectionReview({ view: this.view, parent: this.details, review, signal: this.abort.signal });
   }
 
   /** Render one complete human-readable schema side. @param {string} label Review side. @param {object} type Valid type. @returns {void} */
@@ -118,10 +123,10 @@ export class CatalogEditor {
   /** Save only the reviewed command while locking inputs until the real transaction finishes. @returns {Promise<void>} */
   async apply() {
     check(!!this.review && !this.disposed, 'Preview this type change before saving');
-    const { command, expectedRevision } = this.review;
+    const { review } = this.review;
     const controls = [...this.root.querySelectorAll('input,button,textarea,select')].map(control => [control, control.disabled]);
     for (const [control] of controls) control.disabled = true;
-    try { await this.view.app.applyFromEvent(command, expectedRevision); if (!this.disposed) this.view.finishEditor(); }
+    try { await this.view.app.applyReviewed(review); if (!this.disposed) this.view.finishEditor(); }
     finally { if (!this.disposed) for (const [control, disabled] of controls) control.disabled = disabled; }
   }
 
@@ -129,5 +134,6 @@ export class CatalogEditor {
   dispose() {
     if (this.disposed) return; this.disposed = true; this.generation++; this.abort.abort();
     if (this.form) this.form.dispose(); if (this.migration) this.migration.dispose(); this.root.remove();
+    if (this.conflictImpact) this.conflictImpact.dispose();
   }
 }

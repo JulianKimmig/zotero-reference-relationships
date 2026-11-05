@@ -4,6 +4,7 @@ import { validateGraph, edgeKey } from './graph-contract.mjs';
 import { Contributions } from './contributions.mjs';
 import { matchesRoot, mapRoot } from './rule-values.mjs';
 import { projectRoots } from './project-roots.mjs';
+import { ProjectionContributions } from './projection-contributions.mjs';
 
 const TRANSITION_LIMIT = 100000;
 
@@ -29,10 +30,11 @@ function indexRules(rules) {
  * visited-state checks, and failed predicates still consume a matching transition.
  * @param {object[]} input Physical or projected roots with independent original identities and metadata.
  * @param {object[]} declarations Validated rules from strict original authority.
- * @returns {object} Exact {relationships,transitions}; failures return no partial output.
+ * @param {Contributions} contributions Explicit strict or inspection collector owned by the public evaluator.
+ * @returns {number} Completed transition count; failures return no partial result.
  */
-function evaluateRoots(input, declarations) {
-  const contributions = new Contributions(), rules = indexRules(declarations);
+function traverseRoots(input, declarations, contributions) {
+  const rules = indexRules(declarations);
   const roots = [...input].sort(byID);
   for (const root of roots) contributions.manual(root);
   let transitions = 0;
@@ -55,17 +57,26 @@ function evaluateRoots(input, declarations) {
       }
     }
   }
-  return { relationships: contributions.relationships(), transitions };
+  return transitions;
 }
 
 /** Validate complete physical authority and recompute its unchanged v1 closure contract. @param {object} input Strict complete schema-1 graph. @returns {object} Detached {relationships,transitions}; no partial result on failure. */
 export function evaluateGraph(input) {
-  const graph = validateGraph(input);
-  return evaluateRoots(graph.assertions, graph.rules);
+  const graph = validateGraph(input), contributions = new Contributions();
+  const transitions = traverseRoots(graph.assertions, graph.rules, contributions);
+  return { relationships: contributions.relationships(), transitions };
 }
 
 /** Recompute active native endpoint projections while preserving original assertion and support ownership. @param {object} snapshot Strict original authority. @param {object[]} resolutions Exact complete endpoint observations. @returns {object} Detached {relationships,transitions,diagnostics}; projected roots never pass through stored-snapshot validation. */
 export function evaluateProjection(snapshot, resolutions) {
-  const { graph, roots, diagnostics } = projectRoots(snapshot, resolutions);
-  return { ...evaluateRoots(roots, graph.rules), diagnostics };
+  const { graph, roots, diagnostics } = projectRoots(snapshot, resolutions), contributions = new Contributions();
+  const transitions = traverseRoots(roots, graph.rules, contributions);
+  return { relationships: contributions.relationships(), transitions, diagnostics };
+}
+
+/** Inspect every projected contributor without inventing metadata for conflicting aggregates. @param {object} snapshot Strict original authority. @param {object[]} resolutions Complete native endpoint observations. @returns {object} {state,relationships,clusters,transitions,diagnostics}; relationships is null for a complete conflicted report. */
+export function inspectProjection(snapshot, resolutions) {
+  const { graph, roots, diagnostics } = projectRoots(snapshot, resolutions), contributions = new ProjectionContributions();
+  const transitions = traverseRoots(roots, graph.rules, contributions);
+  return contributions.inspect(transitions, diagnostics);
 }

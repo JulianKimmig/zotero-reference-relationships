@@ -5,7 +5,13 @@ import { evaluateGraph } from '../domain/evaluate.mjs';
 
 /** Evaluate a validated graph once and index every effective relationship by endpoint. @param {object} snapshot Current complete authority. @returns {object} Private library/type/endpoint index. */
 export function buildRelationshipIndex(snapshot) {
-  const { relationships, transitions } = evaluateGraph(snapshot), outgoing = new Map(), incoming = new Map();
+  const { relationships, transitions } = evaluateGraph(snapshot);
+  return indexRelationships(snapshot, relationships, transitions);
+}
+
+/** Index an already validated complete projection without re-running physical closure. @param {object} snapshot Original authority. @param {object[]} relationships Ready complete effective entities. @param {number} transitions Completed work count. @returns {object} Private endpoint index. */
+export function indexRelationships(snapshot, relationships, transitions) {
+  const outgoing = new Map(), incoming = new Map();
   for (const edge of relationships) {
     for (const [map, key] of [[outgoing, edge.source.key], [incoming, edge.target.key]]) {
       if (!map.has(key)) map.set(key, []);

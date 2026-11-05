@@ -2,15 +2,13 @@
 import { element, metadataText } from './dom.mjs';
 import { ruleButton } from './rule-controls.mjs';
 import { ruleDefinition, provenance, describeContributors } from './provenance.mjs';
+import { projectionReview } from './projection-review.mjs';
 
 /** Render a detached complete review with at most 25 affected edges mounted per page. @param {object} options {view,parent,before,review,signal,onError}. @returns {Promise<object>} dispose hook for late page responses. */
 export async function rulePreview({ view, parent, before, review, signal, onError }) {
   const { document, t, app } = view, after = review.snapshot, delta = review.changeSet;
   let generation = 0, disposed = false, offset = 0;
   const container = element(document, 'div'); parent.replaceChildren(container);
-  parent.dataset.rrAdded = delta.derived.added.length; parent.dataset.rrUpdated = delta.derived.updated.length;
-  parent.dataset.rrRemoved = delta.derived.removed.length;
-  container.append(element(document, 'p', {}, `${t('added')}: ${delta.derived.added.length} · ${t('updated')}: ${delta.derived.updated.length} · ${t('removed')}: ${delta.derived.removed.length}`));
   for (const rule of delta.rules.added) {
     container.append(element(document, 'h4', {}, t('added'))); ruleDefinition({ document, parent: container, rule, snapshot: after, t });
   }
@@ -20,6 +18,16 @@ export async function rulePreview({ view, parent, before, review, signal, onErro
   for (const rule of delta.rules.removed) {
     container.append(element(document, 'h4', {}, t('removed'))); ruleDefinition({ document, parent: container, rule, snapshot: before, t });
   }
+  if (delta.derived === null) {
+    const impact = projectionReview({ view, parent: container, review, signal });
+    return {
+      /** Dispose only this complete conflict review's owned resources. @returns {void} */
+      dispose() { impact.dispose(); container.remove(); },
+    };
+  }
+  parent.dataset.rrAdded = delta.derived.added.length; parent.dataset.rrUpdated = delta.derived.updated.length;
+  parent.dataset.rrRemoved = delta.derived.removed.length;
+  container.prepend(element(document, 'p', {}, `${t('added')}: ${delta.derived.added.length} · ${t('updated')}: ${delta.derived.updated.length} · ${t('removed')}: ${delta.derived.removed.length}`));
   const impacts = [...delta.derived.added.map(edge => ({ kind: 'added', after: edge })),
     ...delta.derived.updated.map(pair => ({ kind: 'updated', ...pair })),
     ...delta.derived.removed.map(edge => ({ kind: 'removed', before: edge }))];

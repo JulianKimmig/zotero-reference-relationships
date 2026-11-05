@@ -15,6 +15,7 @@ export function createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncod
   const repositories = createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway });
   const application = new RelationshipApplication({ gateway, repositoryFor: repositories.repositoryFor,
     repositoryForEvent: repositories.repositoryForEvent,
+    digest: repositories.digest,
     now: () => new Date().toISOString(), newID: () => crypto.randomUUID() });
   const report = error => Zotero.logError(error);
   const preferences = createPreferences({ Zotero, id, rootURI, app: application, gateway, report });

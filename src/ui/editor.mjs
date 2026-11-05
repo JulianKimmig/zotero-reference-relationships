@@ -2,6 +2,8 @@
 import { element, button, metadataText } from './dom.mjs';
 import { metadataFields } from './metadata-fields.mjs';
 import { chooseReference } from '../adapters/picker.mjs';
+import { check } from '../domain/values.mjs';
+import { projectionReview } from './projection-review.mjs';
 
 /** Own one actual editor and all its listeners beneath an item-pane view. */
 export class RelationshipEditor {
@@ -9,6 +11,7 @@ export class RelationshipEditor {
   constructor({ view, mode, edge }) {
     this.view = view; this.mode = mode; this.edge = edge;
     this.source = edge ? edge.source : view.ref; this.target = edge ? edge.target : null;
+    this.baseRevision = view.context.revision;
     this.review = null; this.disposed = false; this.reviewGeneration = 0; this.activePreview = null;
     this.abort = new view.window.AbortController();
     this.root = element(view.document, 'section', { 'data-rr-editor': mode, 'aria-label': 'Relationship editor' });
@@ -28,6 +31,7 @@ export class RelationshipEditor {
   /** Remove stale review when values or native state change. @returns {void} */
   invalidate() {
     this.reviewGeneration++; this.review = null;
+    if (this.conflictImpact) this.conflictImpact.dispose(); this.conflictImpact = null;
     if (this.save) this.save.disabled = true;
     if (this.details) this.details.replaceChildren();
   }
@@ -95,6 +99,7 @@ export class RelationshipEditor {
       const input = { source: this.source, target: this.target, type: this.type.value, metadata: this.readMetadata() };
       draft = this.mode === 'edit' ? await app.draftUpdate(this.edge.assertions[0], input, this.source.library) : await app.draftCreate(input);
     }
+    check(draft.expectedRevision === this.baseRevision, 'Relationship data changed; cancel and reopen this editor', 'conflict');
     const review = await app.preview(draft.command, draft.expectedRevision);
     if (this.disposed || generation !== this.reviewGeneration) return;
     this.review = { ...draft, review };
@@ -105,6 +110,7 @@ export class RelationshipEditor {
       const type = this.view.context.types.find(type => type.id === assertion.type);
       this.details.append(element(this.view.document, 'p', {}, `${type.label} · ${metadataText(assertion.metadata, type)}`));
     }
+    if (review.changeSet.derived === null) this.conflictImpact = projectionReview({ view: this.view, parent: this.details, review, signal: this.abort.signal });
     this.save.disabled = false;
     } finally {
       if (!this.disposed && this.activePreview === pending) {
@@ -116,12 +122,12 @@ export class RelationshipEditor {
   /** Apply only the reviewed command; the application repeats validation and commit-time eligibility. @returns {Promise<void>} */
   async apply() {
     if (!this.review || this.disposed) throw new Error('Preview this relationship before saving');
-    const { command, expectedRevision } = this.review;
+    const { review } = this.review;
     const controls = [...this.root.querySelectorAll('button,input,select,textarea')].map(control => [control, control.disabled]);
     for (const [control] of controls) control.disabled = true;
     this.root.setAttribute('aria-busy', 'true');
     try {
-      await this.view.app.applyFromEvent(command, expectedRevision);
+      await this.view.app.applyReviewed(review);
       if (!this.disposed) this.view.finishEditor();
     } finally {
       if (!this.disposed) {
@@ -135,5 +141,6 @@ export class RelationshipEditor {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; this.abort.abort(); if (this.fieldAbort) this.fieldAbort.abort(); this.root.remove();
+    if (this.conflictImpact) this.conflictImpact.dispose();
   }
 }

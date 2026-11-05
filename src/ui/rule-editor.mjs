@@ -60,7 +60,7 @@ export class RuleEditor {
       const impact = await rulePreview({ view: this.view, parent: this.details, before: this.before, review, signal,
         onError: error => this.run(() => { throw error; }) });
       if (this.disposed || generation !== this.generation) { impact.dispose(); return; }
-      this.impact = impact; this.review = draft; this.save.disabled = false;
+      this.impact = impact; this.review = review; this.save.disabled = false;
     } finally {
       if (!this.disposed && this.pending === pending) { this.pending = null; this.root.setAttribute('aria-busy', 'false'); }
     }
@@ -69,10 +69,9 @@ export class RuleEditor {
   /** Publish only the reviewed command while locking the form and library selector. @returns {Promise<void>} */
   async apply() {
     check(!!this.review && !this.disposed, 'Preview this rule change before saving');
-    const { command, expectedRevision } = this.review;
     const controls = [...this.root.querySelectorAll('input,button,textarea,select'), this.view.librarySelect].map(control => [control, control.disabled]);
     for (const [control] of controls) control.disabled = true;
-    try { await this.view.app.applyFromEvent(command, expectedRevision); if (!this.disposed) await this.view.finishEditor(); }
+    try { await this.view.app.applyReviewed(this.review); if (!this.disposed) await this.view.finishEditor(); }
     finally { for (const [control, disabled] of controls) if (control.isConnected) control.disabled = disabled; }
   }
 

@@ -33,12 +33,8 @@ export function createItemGateway(Zotero) {
 
   /** Describe actual endpoint availability and editability without inventing a replacement. @param {object} input ItemRef. @returns {Promise<object>} Detached label/status. */
   async function describe(input) {
-    const reference = validateItemRef(input), owner = library(reference.library);
-    const item = await Zotero.Items.getByLibraryAndKeyAsync(owner.libraryID, reference.key);
-    if (!item) return { ref: reference, title: `Missing reference ${reference.key}`, status: 'missing', editable: false };
-    const status = item.deleted ? 'trashed' : item.isRegularItem() ? 'active' : 'unsupported';
-    return { ref: reference, title: item.getDisplayTitle(), status,
-      editable: status === 'active' && owner.editable && !owner.archived && item.isEditable() };
+    const result = await resolve(input);
+    return { ref: result.original, title: result.title, status: result.status, editable: result.editable };
   }
 
   /** Check current ownership and every changed active bibliographic endpoint inside the write transaction. @param {string} ownerScope Scope. @param {object[]} references Added/updated endpoint refs; removed assertions need only library permission. @returns {Promise<void>} */
@@ -56,10 +52,9 @@ export function createItemGateway(Zotero) {
 
   /** Navigate through native selection APIs to the exact active reference/library. @param {Window} window Real main window. @param {object} input ItemRef. @returns {Promise<void>} */
   async function navigate(window, input) {
-    const reference = validateItemRef(input), owner = library(reference.library);
-    const description = await describe(reference);
-    check(description.status === 'active', 'This reference is unavailable', 'endpoint');
-    const item = await Zotero.Items.getByLibraryAndKeyAsync(owner.libraryID, reference.key);
+    const result = await resolve(input), owner = library(result.original.library);
+    check(result.status === 'active', 'This reference is unavailable', 'endpoint');
+    const item = await Zotero.Items.getByLibraryAndKeyAsync(owner.libraryID, result.resolved.key);
     await window.ZoteroPane.selectItem(item.id);
   }
 

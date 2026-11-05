@@ -6,7 +6,7 @@ import { check } from '../domain/values.mjs';
 /**
  * Share real native transports by scope; guarded writers retain their exact library identity.
  * @param {object} options Actual {Zotero,DOMParser,crypto,TextEncoder,gateway} resources.
- * @returns {object} {repositoryFor,repositoryForEvent,clear} composition boundary.
+ * @returns {object} {repositoryFor,repositoryForEvent,digest,clear} native composition boundary.
  */
 export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway }) {
   const transports = new Map();
@@ -40,5 +40,5 @@ export function createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder
   }
   /** Release owned transport references after application shutdown. @returns {void} */
   function clear() { transports.clear(); }
-  return { repositoryFor, repositoryForEvent, clear };
+  return { repositoryFor, repositoryForEvent, digest, clear };
 }

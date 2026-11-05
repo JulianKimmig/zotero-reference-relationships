@@ -2,11 +2,12 @@
 import { check, exact, identifier, jsonCopy } from '../domain/values.mjs';
 import { validateGraph, validateItemRef } from '../domain/graph-contract.mjs';
 import { initialGraph } from './seed.mjs';
-import { changesBetween } from './changes.mjs';
 import { proposeTypeChange, validateTypeTransition } from './catalog.mjs';
 import { validateRuleTransition } from './rule-transition.mjs';
 import { proposeRuleChange } from './rule-commands.mjs';
-import { buildRelationshipIndex, queryRelationships } from './relationship-index.mjs';
+import { LifecycleProjection } from './lifecycle.mjs';
+import { indexProjection, projectedPage, inspectionPage } from './projection-views.mjs';
+import { IssuedReviews } from './receipts.mjs';
 
 /** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
 function copyState(state) {
@@ -14,32 +15,24 @@ function copyState(state) {
     ? { state: 'ready', head: jsonCopy(state.head), snapshot: validateGraph(state.snapshot) } : jsonCopy(state);
 }
 
-/** Select unique changed endpoints in deterministic library/key order. @param {object} changeSet Valid review. @returns {object[]} Detached refs requiring current native eligibility. */
-function changedRefs(changeSet) {
-  const refs = new Map();
-  for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after),
-    ...changeSet.derived.added, ...changeSet.derived.updated.map(value => value.after)]) {
-    for (const ref of [assertion.source, assertion.target]) refs.set(JSON.stringify(ref), ref);
-  }
-  return [...refs].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([, ref]) => jsonCopy(ref));
-}
-
 /** Rooted application; repository factory enforces the supplied guard inside its native transaction. */
 export class RelationshipApplication {
   #gateway; #repositoryFor; #repositoryForEvent; #now; #newID;
   #repositories = new Map(); #states = new Map(); #stopped = false;
   #views = new WeakMap();
+  #lifecycle; #reviews = new IssuedReviews();
 
   /**
    * Bind required production dependencies without accessing native globals.
-   * @param {object} options {gateway,repositoryFor,repositoryForEvent,now,newID}; factories bind strict/event native transaction boundaries.
+   * @param {object} options {gateway,repositoryFor,repositoryForEvent,digest,now,newID}; factories bind strict/event native transaction boundaries.
    * @returns {RelationshipApplication} Application sharing repository identity and writer/cache ownership.
    */
-  constructor({ gateway, repositoryFor, repositoryForEvent, now, newID }) {
+  constructor({ gateway, repositoryFor, repositoryForEvent, digest, now, newID }) {
     check(!!gateway && ['describe', 'assertWritable', 'ref'].every(name => typeof gateway[name] === 'function'),
       'Explicit item gateway required');
     check([repositoryFor, repositoryForEvent, now, newID].every(value => typeof value === 'function'), 'Explicit repository boundaries, clock and ID functions required');
     this.#gateway = gateway; this.#repositoryFor = repositoryFor; this.#repositoryForEvent = repositoryForEvent; this.#now = now; this.#newID = newID;
+    this.#lifecycle = new LifecycleProjection(gateway, digest);
   }
 
   /** Reject operations after teardown. @returns {void} Throws a visible failure. */
@@ -85,6 +78,20 @@ export class RelationshipApplication {
     return jsonCopy(result);
   }
 
+  /** Coalesce complete native projection inspection/indexing per authority/native invalidation epoch. @param {object} state Private ready state. @returns {Promise<object>} Private complete observation/index. */
+  async #projection(state) {
+    if (!this.#views.has(state)) this.#views.set(state, this.#lifecycle.current(state.snapshot).then(value => indexProjection(state.snapshot, value)));
+    const projection = await this.#views.get(state); this.#active(); return projection;
+  }
+
+  /** Inspect original contributors and unresolved/self-edge diagnostics without writing repair data. @param {string} scope Library. @param {object} page Exact {offset,limit}. @returns {Promise<object>} Detached bounded inspection page. */
+  async reconcile(scope, page) {
+    const state = await this.#current(scope); check(state.state === 'ready', 'Ready authority is required for reconciliation', 'conflict');
+    const projection = await this.#projection(state);
+    if (await this.#current(scope) !== state) return this.reconcile(scope, page);
+    return inspectionPage(projection, page, state.head);
+  }
+
   /**
    * Return small selection context; uninitialized catalog is proposed only, never persisted.
    * @param {object} input ItemRef.
@@ -111,16 +118,10 @@ export class RelationshipApplication {
     const ref = validateItemRef(input), detachedPage = jsonCopy(page);
     const state = await this.#current(ref.library);
     check(state.state === 'ready', `Relationship authority is ${state.state}; a ready generation is required`, 'conflict');
-    if (!this.#views.has(state)) this.#views.set(state, buildRelationshipIndex(state.snapshot));
-    const result = queryRelationships(this.#views.get(state), ref, direction, typeFilter, detachedPage);
-    const { relationships } = result;
-    const endpoints = new Map();
-    for (const edge of relationships) for (const endpoint of [edge.source, edge.target]) endpoints.set(JSON.stringify(endpoint), endpoint);
-    const descriptions = await Promise.all([...endpoints.values()].map(endpoint => this.describe(endpoint)));
-    const diagnostics = descriptions.filter(value => value.status !== 'active').map(value => ({
-      code: 'endpoint', message: `Relationship endpoint is ${value.status}`, details: { ref: value.ref, status: value.status },
-    }));
-    return { revision: state.head, relationships, total: result.total, nextOffset: result.nextOffset, diagnostics };
+    const projection = await this.#projection(state), endpoint = await this.#gateway.resolve(ref); this.#active();
+    if (await this.#current(ref.library) !== state) return this.listRelationships(input, direction, typeFilter, page);
+    check(endpoint.status === 'active', 'Selected reference is unavailable', 'endpoint');
+    return projectedPage(projection, endpoint.resolved, direction, typeFilter, detachedPage, state.head);
   }
 
   /** Select a draft graph only from ready authority or explicit uninitialized action. @param {object} state Backend state. @param {string} scope Library. @returns {object} Independent draft graph. */
@@ -200,7 +201,7 @@ export class RelationshipApplication {
    * Validate and review detached authority against a fresh ready head or explicit initialization.
    * @param {object} command Exact {kind:'replace',snapshot}.
    * @param {string|null} expectedRevision Reviewed native manifest key or null for initialization.
-   * @returns {Promise<object>} Exact {expectedRevision,snapshot,changeSet}; never performs writes.
+   * @returns {Promise<object>} Issued {expectedRevision,snapshot,changeSet,projection,endpointRevision}; never writes.
    */
   async preview(command, expectedRevision) {
     this.#active(); exact(command, ['kind', 'snapshot']);
@@ -213,13 +214,16 @@ export class RelationshipApplication {
     const current = this.#base(state, snapshot.library);
     validateTypeTransition(current, snapshot);
     validateRuleTransition(current, snapshot);
-    const changeSet = changesBetween(current, snapshot);
+    const review = await this.#lifecycle.review(current, snapshot), { changeSet } = review;
+    this.#active();
     for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after)]) {
       this.#activeType(snapshot, assertion.type);
     }
-    await this.#gateway.assertWritable(snapshot.library, changedRefs(changeSet));
+    await this.#gateway.assertWritable(snapshot.library, review.refs);
     this.#active();
-    return { expectedRevision, snapshot, changeSet };
+    if (await this.#current(snapshot.library) !== state) return this.preview(command, expectedRevision);
+    const receipt = { expectedRevision, snapshot, changeSet, projection: review.projection, endpointRevision: review.endpointRevision };
+    this.#reviews.issue(receipt, review.before, review.refs); return receipt;
   }
 
   /**
@@ -227,17 +231,26 @@ export class RelationshipApplication {
    * @param {object} command Full replacement command. @param {string|null} expectedRevision Reviewed head.
    * @returns {Promise<object>} {revision,changeSet} after atomic publication and a fresh read.
    */
-  async apply(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryFor); }
+  async apply(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryFor, null); }
 
   /** Apply at an independent native event boundary, queuing behind unrelated host transactions. Never call from a native transaction callback. @param {object} command Reviewed snapshot command. @param {string|null} expectedRevision Head. @returns {Promise<object>} Committed revision and complete ChangeSet. */
-  async applyFromEvent(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryForEvent); }
+  async applyFromEvent(command, expectedRevision) { return this.#apply(command, expectedRevision, this.#repositoryForEvent, null); }
 
-  /** Revalidate and publish using the explicitly selected native transaction boundary. @param {object} command Snapshot command. @param {string|null} expectedRevision Head. @param {Function} repositoryFor Required strict/event factory. @returns {Promise<object>} Committed revision and ChangeSet. */
-  async #apply(command, expectedRevision, repositoryFor) {
+  /** Publish exactly an actual current-generation user review, rejecting native changes even when the manifest is unchanged. @param {object} receipt Issued complete preview result. @returns {Promise<object>} Committed revision and reviewed ChangeSet. */
+  async applyReviewed(receipt) {
+    this.#active(); const binding = this.#reviews.get(receipt);
+    return this.#apply({ kind: 'replace', snapshot: binding.snapshot }, binding.expectedRevision, this.#repositoryForEvent, binding.endpointRevision);
+  }
+
+  /** Revalidate and publish with manifest/native checks inside the selected owned transaction. @param {object} command Snapshot command. @param {string|null} expectedRevision Head. @param {Function} repositoryFor Strict/event factory. @param {string|null} expectedEndpointRevision User review binding or explicit direct-command mode. @returns {Promise<object>} Committed revision and ChangeSet. */
+  async #apply(command, expectedRevision, repositoryFor, expectedEndpointRevision) {
     const preview = await this.preview(command, expectedRevision), scope = preview.snapshot.library;
-    const refs = changedRefs(preview.changeSet);
+    check(expectedEndpointRevision === null || preview.endpointRevision === expectedEndpointRevision, 'Native endpoints changed; review again', 'conflict');
+    const binding = this.#reviews.get(preview);
     const repository = repositoryFor(scope, async () => {
-      this.#active(); await this.#gateway.assertWritable(scope, jsonCopy(refs)); this.#active();
+      this.#active(); await this.#gateway.assertWritable(scope, binding.refs);
+      this.#active();
+      await this.#lifecycle.assertBinding(binding.before, binding.snapshot, binding.endpointRevision); this.#active();
     });
     let revision;
     try { revision = await repository.compareAndCommit(preview.snapshot, expectedRevision); }
@@ -259,6 +272,7 @@ export class RelationshipApplication {
   /** Stop commands and release cached native references; idempotent. @returns {void} */
   stop() {
     this.#stopped = true; this.invalidateAll();
+    this.#reviews.clear(); this.#lifecycle = null;
     this.#gateway = null; this.#repositoryFor = null; this.#repositoryForEvent = null; this.#now = null; this.#newID = null;
   }
 }

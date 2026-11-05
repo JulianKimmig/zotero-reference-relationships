@@ -5,6 +5,7 @@ import { CatalogEditor } from './catalog-editor.mjs';
 import { check } from '../domain/values.mjs';
 import { ruleLabels } from './rule-controls.mjs';
 import { provenance, describeContributors } from './provenance.mjs';
+import { RepairPanel } from './repair-panel.mjs';
 
 /** Own one native section's DOM and selection generation. */
 export class RelationshipView {
@@ -26,7 +27,7 @@ export class RelationshipView {
     this.item = item;
     this.trace(same ? 'select-same' : 'select-new');
     if (same) return;
-    this.generation++; this.needsShell = true; this.offset = 0;
+    this.generation++; this.needsShell = true; this.offset = 0; this.context = null;
     if (this.editor) { this.editor.dispose(); this.editor = null; }
   }
 
@@ -92,6 +93,8 @@ export class RelationshipView {
     try {
       const context = await this.app.context(ref);
       const t = await ruleLabels(this.document);
+      if (!this.current(generation)) return;
+      this.context = context; this.t = t;
       let result = null;
       if (context.state === 'ready') result = await this.app.listRelationships(ref, 'both', null, { offset: this.offset, limit: 25 });
       const rows = result ? await Promise.all(result.relationships.map(async edge => {
@@ -109,6 +112,7 @@ export class RelationshipView {
       manage.disabled = !context.editable || !['ready', 'uninitialized'].includes(context.state);
       this.root.append(manage);
       this.root.append(button(this.document, t('manage'), 'manage-rules', () => this.run(() => this.openRules(ref.library)), this.abort.signal));
+      if (result?.diagnostics.length) this.appendRepairsAction();
       if (context.state === 'uninitialized') this.root.append(element(this.document, 'p', {}, 'No relationships yet. Saving your first relationship starts this library.'));
       else if (context.state !== 'ready') this.root.append(element(this.document, 'p', { role: 'alert' }, `Relationship data is ${context.state}. Resolve this before making changes.`));
       if (!context.editable) this.root.append(element(this.document, 'p', {}, 'This reference or library is read-only.'));
@@ -125,9 +129,10 @@ export class RelationshipView {
     } catch (error) {
       this.report(error);
       if (this.current(generation)) {
-        this.root.dataset.rrState = 'error';
+        this.root.dataset.rrState = error.code === 'conflict' && this.context?.state === 'ready' ? 'conflict' : 'error';
         this.root.setAttribute('aria-busy', 'false');
         this.root.replaceChildren(element(this.document, 'p', { role: 'alert' }, error.message));
+        if (this.context?.state === 'ready') this.appendRepairsAction();
       }
     }
   }
@@ -145,11 +150,24 @@ export class RelationshipView {
     const text = metadataText(edge.metadata, type); if (text) row.append(element(this.document, 'p', {}, text));
     if (generated) row.append(element(this.document, 'p', {}, `${edge.supports.length} rule support${edge.supports.length === 1 ? '' : 's'}. Generated values follow their explicit roots and rules.`));
     if (generated) row.append(button(this.document, this.t('explain'), 'explain', () => this.run(() => this.explain(row, edge)), this.abort.signal));
-    for (const [mode, label, action] of manual ? [['edit', 'Edit', 'edit'], ['remove', 'Remove', 'remove']] : []) {
+    if (edge.assertions.length > 1) row.append(button(this.document, this.t('choose-contribution'), 'choose-contribution',
+      () => this.openRepairs(edge.assertions), this.abort.signal));
+    for (const [mode, label, action] of edge.assertions.length === 1 ? [['edit', 'Edit', 'edit'], ['remove', 'Remove', 'remove']] : []) {
       const control = button(this.document, label, action, () => this.run(() => this.openEditor(mode, edge)), this.abort.signal);
       control.disabled = !this.context.editable; row.append(control);
     }
     this.list.append(row);
+  }
+
+  /** Expose original retained roots when native projection has issues or conflicts. @returns {void} */
+  appendRepairsAction() {
+    this.root.append(button(this.document, this.t('repair'), 'manage-repairs', () => this.openRepairs(null), this.abort.signal));
+  }
+
+  /** Open an explicit original-root subset or library-wide repair inspection without writes. @param {string[]|null} ids Original IDs or all. @returns {void} */
+  openRepairs(ids) {
+    if (this.editor) this.editor.dispose();
+    const editor = new RepairPanel(this, ids); this.editor = editor; this.root.append(editor.root); editor.run(() => editor.load());
   }
 
   /** Explain actual current roots and rule versions, discarding responses after native selection/revision changes. @param {Element} row Owned relationship row. @param {object} edge Effective relationship. @returns {Promise<void>} */
@@ -164,15 +182,21 @@ export class RelationshipView {
     row.append(details);
   }
 
-  /** Resolve original manual metadata before opening a draft; discard stale selection responses. @param {string} mode create/edit/remove. @param {object|null} edge Effective edge with manual authority, or null for creation. @returns {Promise<void>} Editor opened or stale result ignored. */
-  async openEditor(mode, edge) {
+  /** Resolve one explicitly selected original contribution before opening a draft. @param {string} mode create/edit/remove. @param {object|null} edge Effective/inspection edge or creation. @param {string|null} originalID Explicit contributor ID when multiple roots share a triple. @returns {Promise<void>} Editor opened or stale result ignored. */
+  async openEditor(mode, edge, originalID = null) {
     const generation = this.generation;
     if (edge) {
       const state = await this.app.read(this.ref.library);
+      if (!this.current(generation)) return;
       check(state.state === 'ready', 'Refresh relationship authority before editing', 'conflict');
-      const assertion = state.snapshot.assertions.find(value => value.id === edge.assertions[0]);
+      check(state.head === this.context.revision, 'Relationship data changed; refresh before editing', 'conflict');
+      check(originalID !== null || edge.assertions.length === 1, 'Choose one original relationship contribution');
+      const id = originalID === null ? edge.assertions[0] : originalID;
+      check(edge.assertions.includes(id), 'Original contribution is not part of this relationship');
+      const assertion = state.snapshot.assertions.find(value => value.id === id);
       check(!!assertion, 'This manual relationship is no longer available', 'conflict');
-      edge = { ...edge, metadata: assertion.metadata };
+      edge = { ...edge, source: assertion.source, target: assertion.target, type: assertion.type,
+        metadata: assertion.metadata, assertions: [assertion.id] };
       if (!this.current(generation)) return;
     }
     if (this.editor) this.editor.dispose();
