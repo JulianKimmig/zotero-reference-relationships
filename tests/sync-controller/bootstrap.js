@@ -86,6 +86,13 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action === 'contracts:baseline') {
+    const handler = Services.io.getProtocolHandler('resource')
+      .QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-contract-tests', Services.io.newURI(controllerRootURI));
+    const { contractBaseline } = ChromeUtils.importESModule('resource://rr-contract-tests/contracts.sys.mjs');
+    return contractBaseline(syncJob, { Services, Components, ChromeUtils, TextEncoder });
+  }
   if (syncJob.action.startsWith('feasibility:') || syncJob.action.startsWith('publication:')) {
     const handler = Services.io.getProtocolHandler('resource')
       .QueryInterface(Components.interfaces.nsIResProtocolHandler);
