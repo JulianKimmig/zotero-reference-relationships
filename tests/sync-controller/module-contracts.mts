@@ -1,0 +1,36 @@
+/** Native imports are typed against the real source modules whose compiled files the controller loads. */
+import type { AddonManagerModule, NativeAddon, TestItem } from './platform-contracts.mts';
+
+/** Only actual native imports used by the production and test loaders are declared. */
+export interface NativeModuleLoader {
+  importESModule(uri: 'resource://gre/modules/AddonManager.sys.mjs'): AddonManagerModule;
+  importESModule(uri: 'resource://gre/modules/addons/AddonUpdateChecker.sys.mjs'): { AddonUpdateChecker: {
+    checkForUpdates(id: string, url: string, listener: { onUpdateCheckComplete(updates: object[]): void; onUpdateCheckError(status: number): void }): void;
+  } };
+  importESModule(uri: 'chrome://zotero/content/mergeItems.mjs'): { mergeItems(master: TestItem, others: TestItem[]): Promise<void> };
+  importESModule(uri: `resource://${string}/src/runtime/plugin.mjs`): typeof import('../../src/runtime/plugin.mts');
+  importESModule(uri: `resource://${string}/src/adapters/items.mjs`): typeof import('../../src/adapters/items.mts');
+  importESModule(uri: `resource://${string}/src/adapters/repositories.mjs`): typeof import('../../src/adapters/repositories.mts');
+  importESModule(uri: `resource://${string}/src/adapters/transfer-identity.mjs`): typeof import('../../src/adapters/transfer-identity.mts');
+  importESModule(uri: `resource://${string}/src/domain/evaluate.mjs`): typeof import('../../src/domain/evaluate.mts');
+  importESModule(uri: `resource://${string}/graph-contract.mjs`): typeof import('../../src/domain/graph-contract.mts');
+  importESModule(uri: `resource://${string}/src/application/service.mjs`): typeof import('../../src/application/service.mts');
+  importESModule(uri: `resource://${string}/src/application/lifecycle.mjs`): typeof import('../../src/application/lifecycle.mts');
+  importESModule(uri: `resource://${string}/src/transfer/review.mjs`): typeof import('../../src/transfer/review.mts');
+  importESModule(uri: `resource://${string}/storage/repository.mjs`): typeof import('../../src/storage/repository.mts');
+  importESModule(uri: `resource://${string}/storage/native-notes.mjs`): typeof import('../../src/storage/native-notes.mts');
+  importESModule(uri: `resource://${string}/storage/canonical.mjs`): typeof import('../../src/storage/canonical.mts');
+  importESModule(uri: `resource://${string}/storage/chunks.mjs`): typeof import('../../src/storage/chunks.mts');
+  importESModule(uri: `resource://${string}/storage/envelopes.mjs`): typeof import('../../src/storage/envelopes.mts');
+  importESModule(uri: `resource://${string}/transfer-review.sys.mjs`): typeof import('./transfer-review.sys.mts');
+  importESModule(uri: `resource://${string}/transfer-identity.sys.mjs`): typeof import('./transfer-identity.sys.mts');
+  importESModule(uri: `resource://${string}/reconciliation.sys.mjs`): typeof import('./reconciliation.sys.mts');
+  importESModule(uri: `resource://${string}/rule-preferences.sys.mjs`): typeof import('./rule-preferences.sys.mts');
+  importESModule(uri: `resource://${string}/rule-commands.sys.mjs`): typeof import('./rule-commands.sys.mts');
+  importESModule(uri: `resource://${string}/rules-journey.sys.mjs`): typeof import('./rules-journey.sys.mts');
+  importESModule(uri: `resource://${string}/catalog-journey.sys.mjs`): typeof import('./catalog-journey.sys.mts');
+  importESModule(uri: `resource://${string}/ui-journey.sys.mjs`): typeof import('./ui-journey.sys.mts');
+  importESModule(uri: `resource://${string}/repository.sys.mjs`): typeof import('./repository.sys.mts');
+  importESModule(uri: `resource://${string}/contracts.sys.mjs`): typeof import('./contracts.sys.mts');
+  importESModule(uri: `resource://${string}/native-experiments.sys.mjs`): typeof import('./native-experiments.sys.mts');
+}

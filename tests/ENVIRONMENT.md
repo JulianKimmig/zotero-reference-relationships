@@ -1,23 +1,27 @@
 # Native validation environment
 
-Use Node >=22, system zip/unzip, Xvfb and official Zotero 10.0.7 Linux x86_64. No npm dependencies are required. The test runtime is `/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero`; application version comes from app/application.ini, not the executable's Mozilla --version output.
+Use Node >=22.17, system zip/unzip, Xvfb and official Zotero 10.0.7 Linux x86_64. Run `npm ci` to install the pinned TypeScript compiler and Node declarations. All handwritten executable inputs are TypeScript; `strict: true` checks production modules, tooling, tests and isolated classic native scripts. The test runtime is `/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero`; application version comes from app/application.ini, not the executable's Mozilla --version output.
 
 ## Commands
 
 From the plugin directory:
 
 ```sh
+npm ci
+npm run typecheck
 npm test
 npm run lint
 npm run build
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero npm run test:integration
 ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero npm run test:sync -- /absolute/test-config.json
-ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/feasibility.mjs /absolute/test-config.json
-ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/publication.mjs /absolute/test-config.json
-ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/ui.mjs /absolute/test-config.json
-ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/catalog.mjs /absolute/test-config.json
-ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node scripts/sync/rules.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node .build/scripts/sync/feasibility.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node .build/scripts/sync/publication.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node .build/scripts/sync/ui.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node .build/scripts/sync/catalog.mjs /absolute/test-config.json
+ZOTERO_BIN=/tmp/reference-relationships-runtime/Zotero_linux-x86_64/zotero node .build/scripts/sync/rules.mjs /absolute/test-config.json
 ```
+
+The package commands compile checked `.mts` modules to `.mjs` and classic `.ts` entrypoints to `.js` in the generated `.build` tree. Run `npm run compile` before invoking a specialized `.build/scripts/sync/` runner directly. Static manifest, XHTML, SVG and Fluent assets retain their formats. Source, type declarations, Node tooling and test controllers are excluded from the production archive.
 
 Build creates a fresh production-only XPI in /tmp; it refuses overwriting an existing output and rejects missing/non-HTTPS update URLs. The real configured endpoint is https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json, published manually by the user. No agent push is part of this workflow.
 
@@ -25,9 +29,11 @@ Integration copies a dedicated controller, assigns that actual HTTPS URL, then l
 
 Required checks: isolation, updates-empty, startup, disable, reenable, window-open, window-close, uninstall, shutdown-enabled. Window readiness uses actual native tree-load promises and the visible one of both pinned/unpinned library-tab DOM nodes. The result must report exact dedicated paths and Zotero 10.0.7. The runner also checks the flushed process log for the observed plugin late-unload race.
 
-## Observed evidence
+## Historical scaffold evidence
 
-2026-11-05: final Node suite passed 20 tests; syntax/file documentation/module-size checks passed for 10 JavaScript files. Final native run `/tmp/reference-relationships-integration-chnD2u/` exited zero with all nine checks. Its artifact was `/tmp/reference-relationships-build-VrfGcG/reference-relationships.xpi` (SHA-256 bbe4514237d8e6de3b916f3362f1a16ab6be1fa9544873953fa6c9d9b69c138b).
+This pre-migration checkpoint describes the initial scaffold, not current migration acceptance. Current evidence is owned by the parent TypeScript workflow and execution record.
+
+2026-11-05: scaffold Node suite passed 20 tests; syntax/file documentation/module-size checks passed for 10 JavaScript files. Final native run `/tmp/reference-relationships-integration-chnD2u/` exited zero with all nine checks. Its artifact was `/tmp/reference-relationships-build-VrfGcG/reference-relationships.xpi` (SHA-256 bbe4514237d8e6de3b916f3362f1a16ab6be1fa9544873953fa6c9d9b69c138b).
 
 Earlier native probes established that missing update_url prevents installation and data URLs are disabled by native security. A real late-unload callback after app shutdown reproduced a relationshipRuntime TypeError; the regression rejected the actual captured log before the idempotent source fix. Final run has no such error.
 
@@ -64,8 +70,8 @@ The existing UI runner also holds a real host transaction during Save: direct
 nested writes must reject, while the event command waits for its own transaction
 and publishes only after the host transaction is released.
 
-Publication writes `progress.json` after each successful native job and `result.json` only at full completion. Resume an interrupted suite with `node scripts/sync/publication.mjs /absolute/test-config.json --resume /absolute/evidence-root` only with the same fixture semantics and controller revision. A process crash after a mutation is a failed job even if its private result says success: inspect it and verify its saved keys after a clean restart before recording completion; do not blindly replay the mutation. Missing dependencies stay pending, multiple complete heads stay conflict, and malformed or unknown envelopes fail explicitly.
+Publication writes `progress.json` after each successful native job and `result.json` only at full completion. Resume an interrupted suite with `node .build/scripts/sync/publication.mjs /absolute/test-config.json --resume /absolute/evidence-root` only with the same fixture semantics and controller revision. A process crash after a mutation is a failed job even if its private result says success: inspect it and verify its saved keys after a clean restart before recording completion; do not blindly replay the mutation. Missing dependencies stay pending, multiple complete heads stay conflict, and malformed or unknown envelopes fail explicitly.
 
-For first-account identity testing, create the `feasibility:identity-seed` fixture in a genuinely unsigned-in isolated profile. After user sign-in/sync and close, add this profile as `clients.prelogin`, then run `node scripts/sync/identity.mjs /absolute/test-config.json /absolute/prelogin-result.json /absolute/sync-gate-result.json` with `ZOTERO_BIN` set. The verifier checks the expected account, unchanged item/note keys and payload hash, changed local-to-account URI, and actual arrival on A2. Never copy another profile's authentication material to simulate this transition.
+For first-account identity testing, create the `feasibility:identity-seed` fixture in a genuinely unsigned-in isolated profile. After user sign-in/sync and close, add this profile as `clients.prelogin`, then run `node .build/scripts/sync/identity.mjs /absolute/test-config.json /absolute/prelogin-result.json /absolute/sync-gate-result.json` with `ZOTERO_BIN` set. The verifier checks the expected account, unchanged item/note keys and payload hash, changed local-to-account URI, and actual arrival on A2. Never copy another profile's authentication material to simulate this transition.
 
 No separate submodule documentation tree is maintained. Repository architecture, contracts, workflow ownership and task progress are recorded in the parent's existing system of record.
