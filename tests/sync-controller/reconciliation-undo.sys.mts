@@ -47,8 +47,31 @@ async function readback(job: ControllerJob, api: NativeAPI) {
   return { state, count, rows, cleanReadback: true, noReplay: true, noAuthorityWrites: true };
 }
 
+/** Repeat the failing first-Undo sequence without Debug storage or an intervening diagnostic await; capture actual endpoint and persisted flags after that observation. @param job Fresh anonymous fixture/artifact. @param api Actual native platform. @returns Direct history/endpoint/database evidence; a refusal remains a failed positive journey. */
+async function unloggedProbe(job: ControllerJob, api: NativeAPI) {
+  const { Zotero, ChromeUtils } = api;
+  check(!Zotero.Users.getCurrentUserID(), 'Unlogged Undo probe requires an anonymous profile');
+  const production = await resources(job, api), { a, b, before, count } = await fixtures(job, api);
+  const { mergeItems } = ChromeUtils.importESModule('chrome://zotero/content/mergeItems.mjs');
+  check((await projected(production, readyState(before).snapshot)).relationships.length === 5, 'Unlogged initial closure differs');
+  await mergeItems(a, [b]);
+  const merged = await production.gateway.resolve(ref(b));
+  check(merged.resolved?.key === a.key, 'Unlogged merge did not resolve to survivor');
+  check((await projected(production, readyState(before).snapshot)).relationships.length === 2, 'Unlogged merged closure differs');
+  await preserved(api, before, count);
+  const action = Zotero.UndoHistory.getUndoAction(), applied = await Zotero.UndoHistory.undo();
+  const restored = await production.gateway.resolve(ref(b)), originalDeleted = b.deleted;
+  const persistedDeleted = await Zotero.DB.valueQueryAsync('SELECT COUNT(*) FROM deletedItems WHERE itemID=?', [b.id]);
+  const evidence = { action, applied, merged, restored, originalDeleted, persistedDeleted };
+  await preserved(api, before, count);
+  check(applied === true && restored.status === 'active' && restored.resolved?.key === b.key && !originalDeleted && persistedDeleted === 0,
+    `Unlogged native Undo evidence: ${JSON.stringify(evidence)}`);
+  return { ...evidence, noDebugStore: true, noDiagnosticAwaitBeforeObservation: true, noAuthorityWrites: true };
+}
+
 /** Exercise one actual merge/Undo after the same application reads as the failing foundation journey; native refusal is never counted as a completed Undo. @param job Fresh anonymous fixture/artifact. @param api Actual platform. @returns Explicit native return and endpoint evidence, or a diagnostic failure. */
 export async function reconciliationUndo(job: ControllerJob, api: NativeAPI) {
+  if (job.action === 'reconcile:undo-unlogged') return unloggedProbe(job, api);
   if (job.action === 'reconcile:undo-empty') return emptyHistory(job, api);
   if (job.action === 'reconcile:undo-readback') return readback(job, api);
   check(job.action === 'reconcile:undo-probe', 'Unknown native Undo evidence phase');
