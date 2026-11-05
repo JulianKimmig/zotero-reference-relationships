@@ -9,6 +9,7 @@ import { rejects } from './ui-permissions.sys.mts';
 import { book, ref, commits } from './rules-fixtures.sys.mts';
 import { resources, projected, preserved, fixtures, setEnabled } from './reconciliation-fixtures.sys.mts';
 import { reconciliationIdentity } from './reconciliation-identity.sys.mts';
+import { requireHistoryStep } from './reconciliation-undo.sys.mts';
 
 /** Persist deliberately malformed native aliases only in disposable adversarial fixtures. Production code never writes merge predicates. @param {object} Zotero Actual native API. @param {object} subject Real fixture item. @param {string} uri Real original item URI. @returns {Promise<void>} */
 async function alias(Zotero: TestPlatform, subject: TestItem, uri: string) {
@@ -17,6 +18,10 @@ async function alias(Zotero: TestPlatform, subject: TestItem, uri: string) {
 
 /** Run one real native lifecycle foundation phase; application/UI integration has separate remaining gates. @param {object} job Phase/artifact/saved keys. @param {object} api Actual platform. @returns {Promise<object>} Verified module behavior. */
 export async function reconciliation(job: ControllerJob, api: NativeAPI) {
+  if (job.action.startsWith('reconcile:undo-')) {
+    const { reconciliationUndo } = await import('./reconciliation-undo.sys.mts');
+    return reconciliationUndo(job, api);
+  }
   if (job.action.startsWith('reconcile:libraries-')) {
     if (job.action === 'reconcile:libraries-pending') {
       const { reconciliationLibraryPending } = await import('./reconciliation-library-pending.sys.mts');
@@ -87,6 +92,7 @@ export async function reconciliation(job: ControllerJob, api: NativeAPI) {
   }
   check(job.action === 'reconcile:resolve', 'Unknown lifecycle resolver phase');
   const { a, b, c, d, before, count } = await fixtures(job, api);
+  Zotero.Debug.setStore(true);
   const { mergeItems } = api.ChromeUtils.importESModule('chrome://zotero/content/mergeItems.mjs');
   const original = await projected(production, readyState(before).snapshot); check(original.relationships.length === 5, 'Initial native fixture closure differs');
   await mergeItems(a, [b]);
@@ -98,21 +104,21 @@ export async function reconciliation(job: ControllerJob, api: NativeAPI) {
   check(present(result.relationships.find(edge => edge.type === 'referencing')).assertions.length === 2
     && present(result.relationships.find(edge => edge.type === 'referenced-by')).supports.length === 2, 'Merge lost distinct original contributors');
   await preserved(api, before, count);
-  await Zotero.UndoHistory.undo();
-  check(present((await production.gateway.resolve(ref(b))).resolved).key === b.key, 'Undo did not prefer restored original');
+  const sourceUndo = await requireHistoryStep(api, 'undo'), afterUndo = await production.gateway.resolve(ref(b));
+  check(present(afterUndo.resolved).key === b.key, `Undo did not prefer restored original: ${JSON.stringify({ sourceUndo, afterUndo, original: b.key, deleted: b.deleted })}`);
   check((await projected(production, readyState(before).snapshot)).relationships.length === 5, 'Undo did not restore independent roots');
-  await Zotero.UndoHistory.redo();
+  await requireHistoryStep(api, 'redo');
   check((await projected(production, readyState(before).snapshot)).relationships.length === 2, 'Redo did not restore merge projection');
-  await Zotero.UndoHistory.undo();
+  await requireHistoryStep(api, 'undo');
   await setEnabled(Zotero, production.addon, false);
-  await mergeItems(a, [b]); await Zotero.UndoHistory.undo();
+  await mergeItems(a, [b]); await requireHistoryStep(api, 'undo');
   await setEnabled(Zotero, production.addon, true);
   await preserved(api, before, count);
   check((await projected(production, readyState(before).snapshot)).relationships.length === 5, 'Disabled-plugin merge/Undo lost original ownership');
   await mergeItems(d, [c]);
   check(present((await production.gateway.resolve(ref(c))).resolved).key === d.key, 'Merged target did not resolve to survivor');
-  await Zotero.UndoHistory.undo(); check(present((await production.gateway.resolve(ref(c))).resolved).key === c.key, 'Target Undo lost original');
-  await Zotero.UndoHistory.redo();
+  await requireHistoryStep(api, 'undo'); check(present((await production.gateway.resolve(ref(c))).resolved).key === c.key, 'Target Undo lost original');
+  await requireHistoryStep(api, 'redo');
   d.deleted = true; await d.saveTx();
   result = await projected(production, readyState(before).snapshot);
   check(result.relationships.length === 1 && result.diagnostics.some(value => value.details.status === 'trashed'

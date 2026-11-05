@@ -70,7 +70,12 @@ export interface TestPlatform extends ZoteroPlatform {
   File: { pathToFile(path: string): object }; Plugins: { getRootURI(id: string): Promise<string> };
   DataObjectUtilities: { generateKey(): string }; Prefs: { get(key: string): string | number | boolean };
   Sync: { Runner: { syncInProgress: boolean; sync(options: { background: boolean; libraries: number[]; fileLibraries: number[]; fullTextLibraries: number[]; onError(error: Error): void }): Promise<boolean | void> } };
-  UndoHistory: { undo(): Promise<void>; redo(): Promise<void> };
+  /** Native operations return true only when the host actually applies the requested history step. */
+  UndoHistory: {
+    undo(): Promise<boolean>; redo(): Promise<boolean>;
+    getUndoAction(): { action: string; actionArgs: Record<string, string | number> | null } | null;
+    getRedoAction(): { action: string; actionArgs: Record<string, string | number> | null } | null;
+  };
   Notes: { open(itemID: number): Promise<NativeEditor> }; Debug: { setStore(enabled: boolean): void; get(): string };
   getMainWindow(): TestWindow; getMainWindows(): TestWindow[]; openMainWindow(): void;
 }
