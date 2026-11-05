@@ -56,8 +56,8 @@ export function click(root, action) {
   check(button && !button.disabled, `Action ${action} is unavailable`); button.click();
 }
 
-/** Use the native target picker and its actual selection/dialog acceptance APIs. @param {object} api Real resources. @param {Element} root Relationship editor. @param {object} target Actual native item. @returns {Promise<void>} Picker closed. */
-export async function chooseTarget(api, root, target) {
+/** Use the native endpoint picker and actual selection/dialog acceptance APIs. @param {object} api Real resources. @param {Element} root Relationship editor. @param {object} target Actual native item. @param {string} action Source/target picker action. @returns {Promise<void>} Picker closed. */
+export async function chooseTarget(api, root, target, action = 'choose-target') {
   const { Zotero, Services } = api;
   let windows = [];
   const selection = until(Zotero, () => {
@@ -81,7 +81,7 @@ export async function chooseTarget(api, root, target) {
     })}`);
     dialog.document.querySelector('dialog').acceptDialog();
   });
-  click(root, 'choose-target');
+  click(root, action);
   try { await selection; }
   catch (error) {
     const messages = Services.console.getMessageArray().map(value => value.message)
@@ -90,7 +90,8 @@ export async function chooseTarget(api, root, target) {
       alerts: [...root.querySelectorAll('[role="alert"]')].map(node => node.textContent), messages })}`;
     throw error;
   }
-  await until(Zotero, () => root.querySelector('[data-rr-target-key]')?.dataset.rrTargetKey === target.key, 'chosen target label');
+  const source = action === 'choose-source';
+  await until(Zotero, () => root.querySelector(source ? '[data-rr-source-key]' : '[data-rr-target-key]')?.getAttribute(source ? 'data-rr-source-key' : 'data-rr-target-key') === target.key, 'chosen endpoint label');
 }
 
 /** Fill and review an actual relationship editor. @param {object} api Native resources. @param {Window} window Owner. @param {Element} root Pane. @param {object} target Reference. @param {string} note Metadata. @param {boolean} save Confirm or cancel. @param {boolean} exerciseHostTransaction Test first Save under a real held host transaction. @returns {Promise<void>} Action complete. */

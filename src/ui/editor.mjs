@@ -40,12 +40,19 @@ export class RelationshipEditor {
   render() {
     const { document, context } = this.view, signal = this.abort.signal;
     this.root.append(element(document, 'h4', {}, this.mode === 'remove' ? 'Remove relationship' : this.mode === 'edit' ? 'Edit relationship' : 'Add relationship'));
+    this.sourceLabel = element(document, 'span', { 'data-rr-source-key': this.source.key }, this.source.key);
+    this.root.append(this.sourceLabel);
+    this.run(async () => {
+      const value = await this.view.app.describe(this.source);
+      if (!this.disposed) this.sourceLabel.textContent = `${value.title} [${value.ref.key}]`;
+    });
+    if (this.mode === 'edit') this.root.append(button(document, 'Choose source…', 'choose-source', () => this.run(() => this.pick('source')), signal));
     const targetLabel = element(document, 'span', { 'data-rr-target-key': this.target ? this.target.key : '' }, 'Choose a target reference');
     this.targetLabel = targetLabel;
     if (this.target) this.run(async () => { const value = await this.view.app.describe(this.target); if (!this.disposed) targetLabel.textContent = value.title; });
     this.root.append(targetLabel);
     if (this.mode !== 'remove') {
-      this.root.append(button(document, 'Choose target…', 'choose-target', () => this.run(() => this.pick()), signal));
+      this.root.append(button(document, 'Choose target…', 'choose-target', () => this.run(() => this.pick('target')), signal));
       this.type = element(document, 'select', { 'aria-label': 'Relationship type', 'data-rr-type': '' });
       for (const type of context.types.filter(type => !type.retired || type.id === this.edge?.type)) {
         this.type.append(element(document, 'option', { value: type.id }, type.label));
@@ -75,14 +82,19 @@ export class RelationshipEditor {
       signal: this.fieldAbort.signal, onChange: () => this.invalidate() });
   }
 
-  /** Select through the actual native single-reference picker. @returns {Promise<void>} */
-  async pick() {
+  /** Explicitly replace one endpoint through the actual native single-reference picker. @param {string} endpoint Source or target. @returns {Promise<void>} */
+  async pick(endpoint) {
+    check(['source', 'target'].includes(endpoint), 'Unknown endpoint picker');
     const { Zotero, gateway, window, dialogs } = this.view;
-    const selected = await chooseReference({ Zotero, gateway, window, source: this.source, dialogs });
+    const anchor = endpoint === 'source' ? this.target ?? this.source : this.source;
+    const selected = await chooseReference({ Zotero, gateway, window, source: anchor, dialogs });
     if (!selected || this.disposed) return;
-    this.target = selected; this.invalidate();
+    this[endpoint] = selected; this.invalidate();
     const value = await this.view.app.describe(selected);
-    if (!this.disposed) { this.targetLabel.dataset.rrTargetKey = selected.key; this.targetLabel.textContent = value.title; }
+    if (!this.disposed) {
+      const label = endpoint === 'source' ? this.sourceLabel : this.targetLabel;
+      label.setAttribute(`data-rr-${endpoint}-key`, selected.key); label.textContent = `${value.title} [${selected.key}]`;
+    }
   }
 
   /** Recompute a detached command and a no-write review from current values. @returns {Promise<void>} */

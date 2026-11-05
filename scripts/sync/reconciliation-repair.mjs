@@ -25,7 +25,8 @@ async function main() {
   const common = { xpi, groups: config.groups, marker: `RR repair UI ${randomUUID()}` };
   const repaired = await nativeJob(options, 'repair', { ...common, action: 'reconcile:repair-ui' });
   const restarted = await nativeJob(options, 'repair', { ...common, ...repaired, action: 'reconcile:repair-ui-restart' });
-  await writeFile(join(root, 'result.json'), JSON.stringify({ ok: true, xpi, sha256, repaired, restarted }, null, 2));
+  const endpoints = await nativeJob(options, 'repair', { ...common, ...repaired, action: 'reconcile:repair-ui-endpoints' });
+  await writeFile(join(root, 'result.json'), JSON.stringify({ ok: true, xpi, sha256, repaired, restarted, endpoints }, null, 2));
   console.log(JSON.stringify({ ok: true, root, sha256 }));
 }
 

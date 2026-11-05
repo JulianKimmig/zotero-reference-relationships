@@ -3,8 +3,10 @@ import { check } from '../domain/values.mjs';
 
 /**
  * Open the supported native picker and track only this plugin's dialog for teardown.
- * @param {object} options Actual {Zotero,gateway,window,source,dialogs} resources.
- * @returns {Promise<object|null>} Exact target ItemRef or null on user cancellation.
+ * The opposite endpoint anchors library/exclusion only; it may be unavailable during repair.
+ * Full pair eligibility is enforced by application preview and its native transaction guard.
+ * @param {object} options Actual {Zotero,gateway,window,source,dialogs}; source is the opposite endpoint anchor.
+ * @returns {Promise<object|null>} Exact selected ItemRef or null on user cancellation.
  */
 export async function chooseReference({ Zotero, gateway, window, source, dialogs }) {
   const owner = gateway.library(source.library);
@@ -22,7 +24,7 @@ export async function chooseReference({ Zotero, gateway, window, source, dialogs
     const target = gateway.ref(item);
     check(target.library === source.library && target.key !== source.key,
       'Choose a different reference in the same library');
-    await gateway.assertWritable(source.library, [source, target]);
+    await gateway.assertWritable(source.library, [target]);
     return target;
   } finally { dialogs.delete(dialog); }
 }

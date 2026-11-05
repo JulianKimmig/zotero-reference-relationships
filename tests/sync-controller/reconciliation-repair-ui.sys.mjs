@@ -23,6 +23,10 @@ async function save(Zotero, pane) {
 /** Run actual original-contributor editing, removal, conflict repair and orphan reporting. @param {object} job Phase/artifact/keys. @param {object} api Native resources. @returns {Promise<object>} Evidence. */
 export async function reconciliationRepairUI(job, api) {
   const { Zotero } = api, production = await resources(job, api), app = Zotero.ReferenceRelationships.application, main = Zotero.getMainWindow();
+  if (job.action === 'reconcile:repair-ui-endpoints') {
+    const { reconciliationEndpointUI } = await import('./reconciliation-endpoint-ui.sys.mjs');
+    return reconciliationEndpointUI(job, api);
+  }
   if (job.action === 'reconcile:repair-ui-restart') {
     const a = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, job.a);
     check(JSON.stringify(await app.read('self')) === JSON.stringify(job.before), 'Repair UI restart changed original authority');
