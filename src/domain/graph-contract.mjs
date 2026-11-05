@@ -38,6 +38,8 @@ function timestamp(value) {
   check(Number.isFinite(date.getTime()) && date.toISOString() === value && !value.startsWith('0000'), 'Invalid Gregorian timestamp');
 }
 
+export { timestamp as validateTimestamp };
+
 /**
  * Validate a complete v1 snapshot, preserving historical retired types and
  * original assertions. Merge projection is a derived view and must never rewrite
