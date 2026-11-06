@@ -3,7 +3,8 @@ import type { NativeAPI } from './native-api.mts';
 import type { ControllerJob } from './job-contracts.mts';
 import type { TestItem } from './platform-contracts.mts';
 import { resources, setEnabled } from './reconciliation-fixtures.sys.mts';
-import { measureNative } from './quality-measure.sys.mts';
+import { measureNativePhases } from './profiled-measure.sys.mts';
+import type { NativePhaseTrace } from './native-profile.sys.mts';
 import { ref } from './rules-fixtures.sys.mts';
 import { check, selectPane } from './ui-helpers.sys.mts';
 import { present, readyState } from './evidence.sys.mts';
@@ -21,8 +22,8 @@ async function nativeBooks(api: NativeAPI, count: number): Promise<TestItem[]> {
   return books;
 }
 
-/** Measure one real graph shape with complete stored authority, real endpoint projection and bounded visible pages. @param {object} job Exactly one workload and immutable product XPI. @param {object} api Actual unsigned-in host capabilities. @returns {Promise<object>} Timing distributions and semantic/indexing/persistence evidence. */
-export async function qualityApplication(job: ControllerJob, api: NativeAPI) {
+/** Measure one real graph shape with complete stored authority, real endpoint projection and bounded visible pages. @param job Exactly one workload and immutable product XPI. @param api Actual unsigned-in host capabilities. @param trace Optional owned per-sample native profiling. @returns Timing distributions and semantic/indexing/persistence evidence. */
+export async function qualityApplication(job: ControllerJob, api: NativeAPI, trace?: NativePhaseTrace) {
   const { Zotero, ChromeUtils, DOMParser, crypto, TextEncoder } = api;
   check(!Zotero.Users.getCurrentUserID() && job.qualityWorkloads?.length === 1, 'Native application quality requires one workload in a fresh unsigned-in profile');
   const { shape, graph: original } = job.qualityWorkloads[0];
@@ -49,7 +50,7 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI) {
   app.invalidateAll();
   const state = readyState(await app.read('self')); check(state.head === head, 'Native workload head changed');
   const anchor = ref(books[0]), expectedTotal = graph.assertions.length * (shape === 'sparse' ? 1 : 2);
-  const coldProjection = await measureNative(api, async () => {
+  const coldProjection = await measureNativePhases(api, trace, 'RR_PHASE:coldProjection', async () => {
     app.invalidateAll();
     const page = await app.listRelationships(anchor, 'both', null, { offset: 0, limit: 25 });
     check(page.total === expectedTotal && page.relationships.length === Math.min(expectedTotal, 25), 'Cold projected page lost relationships or ignored its bound');
@@ -63,30 +64,30 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI) {
   };
   let warmSelection;
   try {
-    warmSelection = await measureNative(api, async () => {
+    warmSelection = await measureNativePhases(api, trace, 'RR_PHASE:warmSelection', async () => {
       const page = await app.listRelationships(ref(books[++index]), 'both', null, { offset: 0, limit: 25 });
       check(page.total === (shape === 'sparse' ? 1 : 2), 'Indexed leaf selection returned another reference');
     });
   } finally { Zotero.Items.getAll = getAll; }
   check(fullEnumerations === 0, 'Warm selection enumerates the entire native library');
   index = 0;
-  const nativeSelection = await measureNative(api, async () => {
+  const nativeSelection = await measureNativePhases(api, trace, 'RR_PHASE:nativeSelection', async () => {
     const pane = await selectPane(Zotero, Zotero.getMainWindow(), books[++index]);
     check(pane.querySelectorAll('[data-rr-relation]').length === (shape === 'sparse' ? 1 : 2), 'Native relationship page has missing or extra edges');
   }, 3);
   const draft = await app.draftUpdate(graph.assertions[0].id, { source: graph.assertions[0].source,
     target: graph.assertions[0].target, type: graph.assertions[0].type, metadata: { note: 'Measured real metadata mutation Café 你好' } }, 'self');
-  const preview = await measureNative(api, async () => {
+  const preview = await measureNativePhases(api, trace, 'RR_PHASE:preview', async () => {
     const review = await app.preview(draft.command, draft.expectedRevision);
     check(review.changeSet.assertions.updated.length === 1 && review.projection.after.state === 'ready', 'Measured preview did not retain exactly one metadata edit');
   }, 3);
   const review = await app.preview(draft.command, draft.expectedRevision);
-  const publication = await measureNative(api, async () => {
+  const publication = await measureNativePhases(api, trace, 'RR_PHASE:publication', async () => {
     const result = await app.applyReviewed(review);
     check(result.revision !== head, 'Actual reviewed mutation did not publish');
   }, 1);
   const after = readyState(await app.read('self'));
-  const startupRepair = await measureNative(api, async () => {
+  const startupRepair = await measureNativePhases(api, trace, 'RR_PHASE:startupRepair', async () => {
     await setEnabled(Zotero, production.addon, false); await setEnabled(Zotero, production.addon, true);
     const previous = app; app = present(Zotero.ReferenceRelationships).application;
     check(app !== previous, 'Re-enable retained a stopped application generation');
