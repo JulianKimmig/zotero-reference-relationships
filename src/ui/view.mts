@@ -8,6 +8,7 @@ import { ruleLabels } from './rule-controls.mts';
 import { provenance, describeContributors } from './provenance.mts';
 import { RepairPanel } from './repair-panel.mts';
 import { BulkRemovalEditor } from './bulk-removal.mts';
+import { EditorFocus } from './editor-focus.mts';
 import type { ItemRef } from '../domain/contracts.mts';
 import type { Relationship } from '../domain/projection-contracts.mts';
 import type { EndpointDescription, SelectionContext } from '../application/contracts.mts';
@@ -28,9 +29,11 @@ export class RelationshipView {
   item?: NativeItem | null; context: SelectionContext | null = null;
   declare ref: ItemRef; declare t: Localizer; declare root: HTMLDivElement; declare list: HTMLDivElement; declare abort: AbortController;
   readonly #explanations = new Map<HTMLElement, AbortController>();
+  readonly #editorFocus: EditorFocus;
   /** Bind actual section and shared application resources. @param {object} options {body,window,Zotero,app,gateway,dialogs,refresh,report,openRules}. */
   constructor(options: ViewOptions) {
     Object.assign(this, options); this.document = this.body.ownerDocument as NativeDocument;
+    this.#editorFocus = new EditorFocus(this.document);
     this.generation = 0; this.disposed = false; this.editor = null; this.offset = 0;
     this.needsShell = true; this.rendering = null;
   }
@@ -46,6 +49,7 @@ export class RelationshipView {
     this.item = item;
     this.trace(same ? 'select-same' : 'select-new');
     if (same) return;
+    this.#editorFocus.clear();
     this.generation++; this.needsShell = true; this.offset = 0; this.context = null;
     if (this.editor) { this.editor.dispose(); this.editor = null; }
   }
@@ -56,7 +60,7 @@ export class RelationshipView {
     this.needsShell = false;
     this.trace('shell');
     this.clearExplanations(); if (this.abort) this.abort.abort();
-    if (this.editor) { this.editor.dispose(); this.editor = null; }
+    if (this.editor) { this.#editorFocus.clear(); this.editor.dispose(); this.editor = null; }
     this.abort = new this.window.AbortController();
     if (!this.root) {
       this.root = element(this.document, 'div', { 'data-rr-pane': '' });
@@ -145,9 +149,11 @@ export class RelationshipView {
         if (result.nextOffset !== null) paging.append(button(this.document, 'Next', 'next', () => this.changePage(result.nextOffset!), this.abort.signal));
         this.root.append(paging);
       }
+      this.#editorFocus.restore(this.root);
     } catch (error) {
       this.report(error);
       if (this.current(generation)) {
+        this.#editorFocus.clear();
         this.root.dataset.rrState = error instanceof ContractError && error.code === 'conflict' && this.context?.state === 'ready' ? 'conflict' : 'error';
         this.root.setAttribute('aria-busy', 'false');
         this.root.replaceChildren(element(this.document, 'p', { role: 'alert' }, errorMessage(error)));
@@ -185,6 +191,7 @@ export class RelationshipView {
 
   /** Open an explicit original-root subset or library-wide repair inspection without writes. @param {string[]|null} ids Original IDs or all. @returns {void} */
   openRepairs(ids: string[]|null) {
+    this.#editorFocus.clear();
     if (this.editor) this.editor.dispose();
     const editor = new RepairPanel(this, ids); this.editor = editor; this.root.append(editor.root); editor.run(() => editor.load());
   }
@@ -192,6 +199,7 @@ export class RelationshipView {
   /** Open one atomic preview for explicitly selected original removals. @param {string[]} ids Selected original assertion IDs. @returns {void} */
   openRemoval(ids: string[]) {
     check(this.context?.editable && ids.length > 0, 'Choose editable original relationships', 'permission');
+    this.#editorFocus.clear();
     if (this.editor) this.editor.dispose();
     this.editor = new BulkRemovalEditor(this, ids); this.root.append(this.editor.root);
   }
@@ -235,16 +243,19 @@ export class RelationshipView {
     }
     if (this.editor) this.editor.dispose();
     this.editor = new RelationshipEditor({ view: this, mode, edge }); this.root.append(this.editor.root);
+    this.#editorFocus.open(this.root, this.editor.root, { action: mode === 'create' || !edge?.key ? 'add' : mode, relationship: edge?.key ?? null });
   }
 
   /** Open a selected-library catalog draft without persisting proposed seed data. @returns {void} */
   openCatalog() {
+    this.#editorFocus.clear();
     if (this.editor) this.editor.dispose();
     this.editor = new CatalogEditor(this); this.root.append(this.editor.root);
   }
 
   /** Cancel or complete editing, then refresh via the supported section callback. @returns {void} */
   finishEditor() {
+    if (this.editor) this.#editorFocus.finish(this.editor.root);
     if (this.editor) this.editor.dispose(); this.editor = null;
     this.requestRefresh();
   }
@@ -266,6 +277,7 @@ export class RelationshipView {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; this.generation++;
+    this.#editorFocus.clear();
     this.clearExplanations(); if (this.abort) this.abort.abort(); if (this.editor) this.editor.dispose();
     if (this.root) this.root.remove();
     this.item = null;
