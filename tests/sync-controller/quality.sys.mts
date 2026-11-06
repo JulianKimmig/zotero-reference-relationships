@@ -17,6 +17,9 @@ import { qualityProfiledApplication } from './quality-profiled-application.sys.m
 import { qualityReadonlyPreview } from './quality-readonly-preview.sys.mts';
 import { qualityCatalog } from './quality-catalog.sys.mts';
 import { qualityResources, qualityResourceMenu } from './quality-resources.sys.mts';
+import { qualityIndexedSelection } from './quality-indexed-selection.sys.mts';
+import { qualityNoteDiscovery } from './quality-note-discovery.sys.mts';
+import { qualityNoteIntegrity, qualityNoteIntegrityReadback } from './quality-note-integrity.sys.mts';
 import { check } from './ui-helpers.sys.mts';
 
 /** Dispatch an exact explicitly selected quality case without silently substituting another test. @param {object} job Artifact-bound fresh anonymous native job. @param {object} api Real native host. @returns {Promise<object>} Actual case report; final process status is validated by the runner. */
@@ -41,6 +44,10 @@ export async function quality(job: ControllerJob, api: NativeAPI) {
   if (job.action === 'quality:catalog' || job.action === 'quality:catalog-pages') return qualityCatalog(job, api);
   if (job.action === 'quality:resources') return qualityResources(job, api);
   if (job.action === 'quality:resources-menu-readonly') return qualityResourceMenu(job, api);
+  if (job.action === 'quality:indexed-selection') return qualityIndexedSelection(job, api);
+  if (job.action === 'quality:note-discovery') return qualityNoteDiscovery(job, api);
+  if (job.action === 'quality:note-integrity') return qualityNoteIntegrity(job, api);
+  if (job.action === 'quality:note-integrity-readback') return qualityNoteIntegrityReadback(job, api);
   check(job.action === 'quality:shutdown-plugin' || job.action === 'quality:shutdown-baseline', 'Unknown native quality action');
   return qualityShutdown(job, api);
 }

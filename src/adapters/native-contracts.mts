@@ -15,6 +15,13 @@ export interface NativeItem {
   loadDataType(type: string): Promise<void>; getDisplayTitle(): string;
   getNote(): string; setNote(html: string): void; save(): Promise<number | boolean>;
 }
+/** Unsaved native search restricted to the documented standalone-note selector used by authority discovery. */
+export interface NativeNoteSearch {
+  libraryID: number;
+  addCondition(condition: 'itemType', operator: 'is', value: 'note'): number;
+  addCondition(condition: 'noChildren', operator: 'true'): number;
+  search(): Promise<number[]>;
+}
 /** Native promise deferred supplied to the supported reference selection dialog. */
 export interface Deferred<T = void> { promise: Promise<T>; resolve(value: T): void; reject(reason: unknown): void }
 /** Dialog data is mutated by the real native picker before resolving its deferred. */
@@ -57,6 +64,7 @@ export interface ZoteroPlatform {
     getAsync(id: number): Promise<NativeItem | false>; getAll(libraryID: number, topLevel: boolean, deleted: boolean): Promise<NativeItem[]>;
   };
   Item: new (kind: string) => NativeItem;
+  Search: new () => NativeNoteSearch;
   DB: { inTransaction(): boolean; executeTransaction<T>(action: () => Promise<T>): Promise<T> };
   Relations: { replacedItemPredicate: string; getByPredicateAndObject(kind: string, predicate: string, uri: string): Promise<NativeItem[]> };
   URI: { getLibraryURI(id: number): string };

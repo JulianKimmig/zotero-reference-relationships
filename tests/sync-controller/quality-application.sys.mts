@@ -5,7 +5,7 @@ import type { TestItem } from './platform-contracts.mts';
 import { resources, setEnabled } from './reconciliation-fixtures.sys.mts';
 import { measureNativePhases } from './profiled-measure.sys.mts';
 import type { NativePhaseTrace } from './native-profile.sys.mts';
-import { ref } from './rules-fixtures.sys.mts';
+import { ref, commits } from './rules-fixtures.sys.mts';
 import { check, selectPane } from './ui-helpers.sys.mts';
 import { present, readyState } from './evidence.sys.mts';
 
@@ -49,6 +49,8 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI, tra
   }
   app.invalidateAll();
   const state = readyState(await app.read('self')); check(state.head === head, 'Native workload head changed');
+  await present(api.IOUtils).writeUTF8(`${present(job.data)}/quality-application-seed.json`,
+    JSON.stringify({ state, manifests: await commits(api), shape, nativeReferences: books.map(ref) }), { mode: 'create', flush: true });
   const anchor = ref(books[0]), expectedTotal = graph.assertions.length * (shape === 'sparse' ? 1 : 2);
   const coldProjection = await measureNativePhases(api, trace, 'RR_PHASE:coldProjection', async () => {
     app.invalidateAll();
@@ -77,6 +79,8 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI, tra
   }, 3);
   const draft = await app.draftUpdate(graph.assertions[0].id, { source: graph.assertions[0].source,
     target: graph.assertions[0].target, type: graph.assertions[0].type, metadata: { note: 'Measured real metadata mutation Café 你好' } }, 'self');
+  await present(api.IOUtils).writeUTF8(`${present(job.data)}/quality-application-proposal.json`,
+    JSON.stringify(draft), { mode: 'create', flush: true });
   const preview = await measureNativePhases(api, trace, 'RR_PHASE:preview', async () => {
     const review = await app.preview(draft.command, draft.expectedRevision);
     check(review.changeSet.assertions.updated.length === 1 && review.projection.after.state === 'ready', 'Measured preview did not retain exactly one metadata edit');
@@ -87,6 +91,8 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI, tra
     check(result.revision !== head, 'Actual reviewed mutation did not publish');
   }, 1);
   const after = readyState(await app.read('self'));
+  await present(api.IOUtils).writeUTF8(`${present(job.data)}/quality-application-publication.json`,
+    JSON.stringify({ state: after, manifests: await commits(api) }), { mode: 'create', flush: true });
   const startupRepair = await measureNativePhases(api, trace, 'RR_PHASE:startupRepair', async () => {
     await setEnabled(Zotero, production.addon, false); await setEnabled(Zotero, production.addon, true);
     const previous = app; app = present(Zotero.ReferenceRelationships).application;

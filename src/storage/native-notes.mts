@@ -73,15 +73,18 @@ export function createNativeTransport({ Zotero, DOMParser, libraryID }: NativeTr
     return decode(await Zotero.Items.getByLibraryAndKeyAsync(libraryID, key), true);
   }
 
-  /** Discover complete actual observations in one library; never select a subset of heads. @returns {Promise<object[]>} Marked authority notes. */
+  /** Discover every standalone nondeleted note through an unsaved native search in the exact library, retaining known-key checks outside that candidate set. @returns {Promise<object[]>} All marked authority notes; no head selection or full-library item enumeration. */
   async function scan() {
     check(Zotero.Libraries.get(libraryID) === library, 'Library is unavailable', 'endpoint');
-    const notes = (await Zotero.Items.getAll(libraryID, true, false)).filter(item => item.isNote());
+    const search = new Zotero.Search(); search.libraryID = libraryID;
+    search.addCondition('itemType', 'is', 'note'); search.addCondition('noChildren', 'true');
+    const ids = await search.search();
     const result: PhysicalNote[] = [], seen = new Set<string>();
     let bytes = 0;
-    for (const item of notes) {
-      const entry = await decode(item, known.has(item.key));
-      if (entry) { result.push(entry); seen.add(item.key); bytes += encoder.encode(entry.html).byteLength; }
+    for (const id of ids) {
+      const item = await Zotero.Items.getAsync(id);
+      const entry = await decode(item, !!item && known.has(item.key));
+      if (entry) { result.push(entry); seen.add(entry.key); bytes += encoder.encode(entry.html).byteLength; }
       check(result.length <= 4096 && bytes <= 33_554_432, 'Authority observation exceeds bounded history', 'limit');
     }
     for (const key of known) {
