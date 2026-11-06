@@ -103,7 +103,19 @@ export class LifecycleProjection {
 
   /** Review complete current/proposed projections; conflicted before-state remains explicit. @param {object} before Current valid authority. @param {object} after Proposed valid authority. @returns {Promise<object>} ChangeSet, complete projection sides, endpoint binding and commit-time eligibility references. */
   async review(before: unknown, after: unknown) {
-    const current = validateGraph(before), proposed = validateGraph(after), observation = await this.observe([current, proposed]);
+    return this.#reviewPrepared(validateGraph(before), validateGraph(after));
+  }
+
+  /** Capture privately owned, already validated normalized finite-JSON authorities with native structured cloning before any suspension. Application preview admits external commands through validateGraph before this entry. @param before Private validated current graph. @param after Private validated proposal. @returns Fully detached review with the same projection, native binding and delta checks as strict review. */
+  async reviewCaptured(before: Graph, after: Graph) {
+    const current = structuredClone(before), proposed = structuredClone(after);
+    return this.#reviewPrepared(current, proposed);
+  }
+
+  /** Review exclusively owned normalized captures, yielding before native reference preparation. @param current Detached current authority. @param proposed Detached proposal. @returns Complete review, or the original validation/native/cancellation failure. */
+  async #reviewPrepared(current: Graph, proposed: Graph) {
+    this.cooperation.assertActive(); await this.cooperation.yieldToHost(); this.cooperation.assertActive();
+    const observation = await this.observe([current, proposed]);
     check(current.library === proposed.library, 'Cannot review graphs from different libraries');
     const assertions = entityDelta(current.assertions, proposed.assertions, 'id'); validateWrites(current, proposed, assertions, observation.rows);
     const previous = await inspectObservedAsync(current, observation.rows, this.cooperation);

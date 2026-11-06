@@ -31,7 +31,11 @@ function destructive(before: RelationshipType, after: RelationshipType): boolean
  * @returns {void} Throws before publication on an invalid transition.
  */
 export function validateTypeTransition(before: unknown, after: unknown): void {
-  const current = validateGraph(before), proposed = validateGraph(after);
+  validateCapturedTypeTransition(validateGraph(before), validateGraph(after));
+}
+
+/** Check definitions over application-owned validateGraph outputs without mutating or retaining them. @param current Private normalized current authority. @param proposed Private normalized proposal. @returns Identical catalog identity/version guards to the raw admission entry. */
+export function validateCapturedTypeTransition(current: Graph, proposed: Graph): void {
   check(current.library === proposed.library, 'Catalog transition crosses libraries');
   const old = new Map(current.types.map(type => [type.id, type]));
   const next = new Map(proposed.types.map(type => [type.id, type]));

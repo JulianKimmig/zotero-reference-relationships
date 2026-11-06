@@ -2,8 +2,8 @@
 import { check, exact, identifier, jsonCopy } from '../domain/values.mts';
 import { validateGraph, validateItemRef } from '../domain/graph-contract.mts';
 import { initialGraph } from './seed.mts';
-import { proposeTypeChange, validateTypeTransition } from './catalog.mts';
-import { validateRuleTransition } from './rule-transition.mts';
+import { proposeTypeChange, validateCapturedTypeTransition } from './catalog.mts';
+import { validateCapturedRuleTransition } from './rule-transition.mts';
 import { proposeRuleChange } from './rule-commands.mts';
 import { LifecycleProjection } from './lifecycle.mts';
 import { indexProjection, projectedPage, inspectionPage } from './projection-views.mts';
@@ -14,8 +14,8 @@ import type { Page } from '../domain/pagination.mts';
 import type { RepositoryState } from '../storage/contracts.mts';
 import type { Applied, ApplicationGateway, ApplicationOptions, AssertionInput, Draft, RepositoryFactory, RepositoryPort, Review, RuleCommand, SelectionContext, TypeCommand } from './contracts.mts';
 
-/** Copy a backend state without imposing the graph byte limit on its enclosing state. @param {object} state Authoritative read state. @returns {object} Detached ordinary JSON. */
-function copyState(state: RepositoryState): RepositoryState {
+/** Admit and detach backend state once without imposing the graph byte limit on its enclosing state. @param state External authoritative read state. @returns Privately owned normalized ordinary JSON after strict graph/JSON validation. */
+function admitState(state: RepositoryState): RepositoryState {
   return state.state === 'ready'
     ? { state: 'ready', head: jsonCopy(state.head), snapshot: validateGraph(state.snapshot) } : jsonCopy(state);
 }
@@ -61,7 +61,7 @@ export class RelationshipApplication {
   async #current(scope: string, fresh: boolean = false): Promise<RepositoryState> {
     const repository = this.#repository(scope);
     if (fresh || !this.#states.has(scope)) {
-      const entry = { promise: Promise.resolve().then(() => repository.read()).then(copyState) };
+      const entry = { promise: Promise.resolve().then(() => repository.read()).then(admitState) };
       this.#states.set(scope, entry);
     }
     const entry = this.#states.get(scope)!;
@@ -73,8 +73,8 @@ export class RelationshipApplication {
     return state;
   }
 
-  /** Return cached authoritative backend state detached for its caller. @param {string} scope Library. @returns {Promise<object>} Exact repository read state. */
-  async read(scope: string) { return copyState(await this.#current(scope)); }
+  /** Detach a public read from the privately admitted finite-JSON cache. @param scope Library. @returns Exact independent repository state; strict backend admission remains owned by #current. */
+  async read(scope: string) { return structuredClone(await this.#current(scope)); }
 
   /** Resolve a title/status through the actual gateway. @param {object} input ItemRef. @returns {Promise<object>} Detached native description. */
   async describe(input: unknown) {
@@ -130,9 +130,9 @@ export class RelationshipApplication {
     return projectedPage(projection, endpoint.resolved, direction, typeFilter, detachedPage, state.head);
   }
 
-  /** Select a draft graph only from ready authority or explicit uninitialized action. @param {object} state Backend state. @param {string} scope Library. @returns {object} Independent draft graph. */
+  /** Select an independent draft from privately admitted authority or an explicit uninitialized action. @param state State already admitted by #current. @param scope Library. @returns Independent normalized draft graph. */
   #base(state: RepositoryState, scope: string): Graph {
-    if (state.state === 'ready') return validateGraph(state.snapshot);
+    if (state.state === 'ready') return structuredClone(state.snapshot);
     check(state.state === 'uninitialized', `Relationship authority is ${state.state}; draft unavailable`, 'conflict');
     return initialGraph(scope);
   }
@@ -221,9 +221,9 @@ export class RelationshipApplication {
     check((state.state === 'ready' && state.head === expectedRevision)
       || (state.state === 'uninitialized' && expectedRevision === null), 'Authority revision changed; review again', 'conflict');
     const current = this.#base(state, snapshot.library);
-    validateTypeTransition(current, snapshot);
-    validateRuleTransition(current, snapshot);
-    const review = await this.#lifecycle!.review(current, snapshot), { changeSet } = review;
+    validateCapturedTypeTransition(current, snapshot);
+    validateCapturedRuleTransition(current, snapshot);
+    const review = await this.#lifecycle!.reviewCaptured(current, snapshot), { changeSet } = review;
     this.#active();
     for (const assertion of [...changeSet.assertions.added, ...changeSet.assertions.updated.map(value => value.after)]) {
       this.#activeType(snapshot, assertion.type);

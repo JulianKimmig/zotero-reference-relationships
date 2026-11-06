@@ -1,9 +1,9 @@
 /** Pure contract assertions and detached strict NFC JSON; no platform or test dependencies. */
 import type { JsonValue } from './contracts.mts';
+import { jsonTokenBytes } from './json-token-bytes.mts';
 
 const MAX_DEPTH = 32;
 const MAX_BYTES = 1_048_576;
-const encoder = new TextEncoder();
 
 /** A domain failure with a stable machine-readable code and diagnostic details. */
 export class ContractError extends Error {
@@ -131,7 +131,7 @@ export function jsonCopy<T>(value: T): T {
   let bytes = 0;
   /** Count canonical serialized bytes. @param {string} token JSON token. @returns {void} Throws on overflow. */
   function account(token: string): void {
-    bytes += encoder.encode(token).byteLength;
+    bytes += jsonTokenBytes(token);
     check(bytes <= MAX_BYTES, 'JSON UTF-8 byte limit exceeded', 'limit');
   }
   /** Copy a bounded node. @param {*} item Candidate. @param {number} depth Root-relative depth. @returns {*} Copy. */
