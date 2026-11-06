@@ -5,6 +5,7 @@ import type { TestWindow } from './platform-contracts.mts';
 import { present } from './evidence.sys.mts';
 import { check } from './ui-helpers.sys.mts';
 import type { JourneyStroke } from './keyboard-contracts.mts';
+import { publishNativeKeyboardJSON } from './keyboard-packets.sys.mts';
 
 /** Detached non-secret event observations distinguish trusted input from programmatic state changes. */
 interface KeyObservation { type: string; key: string | null; trusted: boolean; target: string; focused: string }
@@ -55,10 +56,10 @@ export class NativeKeyboardDriver {
   async keys(window: TestWindow, strokes: JourneyStroke[], label: string): Promise<void> {
     const io = present(this.api.IOUtils), step = this.#step++, marker = this.track(window);
     const exchange = `${this.job.data}/keyboard-journey`, before = identity(activeControl(window.document));
-    await io.writeUTF8(`${exchange}/request-${step}.json`, JSON.stringify({ action: this.job.action, marker: this.job.marker,
+    await publishNativeKeyboardJSON(io, `${exchange}/request-${step}.json`, { action: this.job.action, marker: this.job.marker,
       data: this.job.data, step, state: 'ready', display: this.api.Services.env.get('DISPLAY'), authority: this.api.Services.env.get('XAUTHORITY'),
       windowMarker: marker, focus: step === 0 ? 'assign' : 'require', strokes, label,
-      windowFocused: window.document.hasFocus(), activeControl: before }), { mode: 'create', flush: true });
+      windowFocused: window.document.hasFocus(), activeControl: before });
     const deadline = Date.now() + 20000;
     let reply: { marker: string; data: string; step: number; ok: boolean; error?: string } | undefined;
     while (!reply) {

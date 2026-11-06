@@ -12,6 +12,7 @@ import { parseKeyboardProbeArguments, observeKeyboardJob } from './keyboard-prob
 import { validateJourneyRequest } from './keyboard-exchange.mts';
 import { sendX11JourneyKeys } from './x11-journey.mts';
 import { errorCode } from '../errors.mts';
+import { publishKeyboardJSON } from './keyboard-packets.mts';
 import type { SyncConfig } from '../contracts.mts';
 import type { qualityKeyboardJourney } from '../../tests/sync-controller/quality-keyboard-journey.sys.mts';
 
@@ -20,20 +21,20 @@ async function deliver(exchange: string, identity: { marker: string; data: strin
   const deadline = Date.now() + 230000;
   for (let step = 0; step < 400; step++) {
     let packet: unknown;
-    while (!packet) {
+    while (packet === undefined) {
       assert.ok(Date.now() < deadline, 'Native keyboard journey delivery deadline exceeded');
       try { packet = JSON.parse(await readFile(join(exchange, `request-${step}.json`), 'utf8')); }
       catch (error) { if (errorCode(error) !== 'ENOENT') throw error; }
-      if (!packet) { if (completed()) return; await delay(25); }
+      if (packet === undefined) { if (completed()) return; await delay(25); }
     }
     const request = validateJourneyRequest(packet, { ...identity, step });
     try {
       const sender = await sendX11JourneyKeys(request.target, request.strokes, request.focus);
-      await writeFile(join(exchange, `delivery-${step}.json`), JSON.stringify({ request: packet, sender }, null, 2), { mode: 0o600, flag: 'wx' });
-      await writeFile(join(exchange, `reply-${step}.json`), JSON.stringify({ ...identity, step, ok: true }), { mode: 0o600, flag: 'wx' });
+      await publishKeyboardJSON(join(exchange, `delivery-${step}.json`), { request: packet, sender });
+      await publishKeyboardJSON(join(exchange, `reply-${step}.json`), { ...identity, step, ok: true });
     } catch (error) {
-      await writeFile(join(exchange, `reply-${step}.json`), JSON.stringify({ ...identity, step, ok: false,
-        error: error instanceof Error ? error.message : String(error) }), { mode: 0o600, flag: 'wx' });
+      await publishKeyboardJSON(join(exchange, `reply-${step}.json`), { ...identity, step, ok: false,
+        error: error instanceof Error ? error.message : String(error) });
       throw error;
     }
   }

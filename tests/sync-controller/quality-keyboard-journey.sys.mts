@@ -7,6 +7,8 @@ import { check, selectPane, until } from './ui-helpers.sys.mts';
 import { present, readyState } from './evidence.sys.mts';
 import { NativeKeyboardDriver, activeControl } from './keyboard-driver.sys.mts';
 import type { TestWindow } from './platform-contracts.mts';
+import { NativeAccessibilityAudit } from './accessibility-audit.sys.mts';
+import { verifyNativeKeyboardPublication } from './keyboard-packets.sys.mts';
 
 /** Locate an actual opened native window without activating it or creating a replacement. @param api Real host. @param uri Native document URI. @returns Ready current window. */
 async function opened(api: NativeAPI, uri: string): Promise<TestWindow> {
@@ -25,6 +27,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
   const a = await book(Zotero, 'keyboard-source Café 你好'), b = await book(Zotero, 'keyboard-target');
   const window = Zotero.getMainWindow(), root = await selectPane(Zotero, window, a);
   const driver = new NativeKeyboardDriver(job, api), stages: object[] = [];
+  const accessibility = new NativeAccessibilityAudit(api);
   /** Persist exact current authority and projected rows after an intentional UI publication. @param label Completed workflow stage. @returns Current validated ready state. */
   async function checkpoint(label: string) {
     app.invalidateAll(); const state = readyState(await app.read('self'));
@@ -38,13 +41,22 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     return until(Zotero, () => scope.querySelector<HTMLButtonElement>(`[data-rr-action="${action}"]:not(:disabled)`), `${action} enabled`);
   }
   try {
+    await verifyNativeKeyboardPublication(io, exchange);
+    await accessibility.ready(window.document);
     // The only programmatic focus is the initial fixture precondition; every later transition is keyboard-driven.
     window.focus(); present(root.querySelector<HTMLButtonElement>('[data-rr-action="add"]')).focus();
     await driver.key(window, 'space', 'open create');
     const editor = await until(Zotero, () => root.querySelector<HTMLElement>('[data-rr-editor="create"]'), 'keyboard create editor');
     check(window.document.activeElement === editor.querySelector('[data-rr-action="choose-target"]'), 'Create editor did not take keyboard focus');
+    await accessibility.capture('create relationship', editor, {
+      target: ['[data-rr-action="choose-target"]', 'Choose target…'], type: ['[data-rr-type]', 'Relationship type'],
+      note: ['[data-rr-field="note"]', 'Note (optional)'], save: ['[data-rr-action="save"]', 'Save relationship'],
+      preview: ['[data-rr-action="preview"]', 'Preview'], cancel: ['[data-rr-action="cancel"]', 'Cancel'],
+    });
+    await accessibility.focused('create entry', present(editor.querySelector('[data-rr-action="choose-target"]')));
     await driver.action(window, editor, 'preview');
     await until(Zotero, () => editor.querySelector('[role="alert"]')?.textContent?.includes('Choose a target reference'), 'keyboard validation error');
+    await accessibility.alert('Choose a target reference');
     check((await app.read('self')).state === 'uninitialized' && await commits(api) === 0, 'Invalid keyboard preview wrote authority');
     await driver.action(window, editor, 'choose-target');
     const dialog = await opened(api, 'chrome://zotero/content/selectItemsDialog.xhtml');
@@ -72,6 +84,13 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     const rules = await until(Zotero, () => preferences.document.querySelector<HTMLElement>('[data-rr-preferences][data-rr-state="ready"]'), 'keyboard preferences ready');
     await driver.action(preferences, rules, 'new-rule');
     const form = await until(Zotero, () => rules.querySelector<HTMLElement>('[data-rr-rule-editor]'), 'keyboard inverse form');
+    await accessibility.ready(preferences.document);
+    await accessibility.capture('inverse rule form', form, {
+      id: ['[data-rr-rule-field="id"]', 'Stable rule ID'], enabled: ['[data-rr-rule-field="enabled"]', 'Enabled'],
+      root: ['[data-rr-rule-field="rootType"]', 'Explicit root type'], input: ['[data-rr-rule-field="inputType"]', 'Matching relationship type'],
+      output: ['[data-rr-rule-field="outputType"]', 'Output relationship type'], transform: ['[data-rr-rule-field="transform"]', 'Output endpoints'],
+    });
+    await accessibility.focused('rule entry', present(form.querySelector('[data-rr-rule-field="id"]')));
     await driver.text(preferences, () => form.querySelector('[data-rr-rule-field="id"]'), 'keyboard-inverse');
     for (const [field, value] of [['rootType', 'referencing'], ['inputType', 'referencing'], ['outputType', 'referenced-by'], ['transform', 'reverse']]) {
       await driver.select(preferences, () => form.querySelector<HTMLSelectElement>(`[data-rr-rule-field="${field}"]`), value);
@@ -91,6 +110,8 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     const manual = () => [...root.querySelectorAll<HTMLElement>('[data-rr-relation]')].find(row => !!row.querySelector('[data-rr-action="edit"]')) ?? null;
     await driver.action(window, present(manual()), 'edit');
     const edit = await until(Zotero, () => root.querySelector<HTMLElement>('[data-rr-editor="edit"]'), 'keyboard edit form');
+    await accessibility.capture('edit relationship', edit, { source: ['[data-rr-action="choose-source"]', 'Choose source…'],
+      note: ['[data-rr-field="note"]', 'Note (optional)'], save: ['[data-rr-action="save"]', 'Save relationship'] });
     await driver.text(window, () => edit.querySelector('[data-rr-field="note"]'), 'edited note');
     await driver.action(window, edit, 'preview'); await reviewed(edit, 'save'); await driver.action(window, edit, 'save');
     await until(Zotero, () => !root.querySelector('[data-rr-editor]') && root.dataset.rrState === 'ready', 'keyboard edit saved');
@@ -99,6 +120,8 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
       && edited.rows.relationships.every(row => row.metadata.note === 'edited note'), 'Keyboard edit lost root identity or inverse metadata');
     await driver.action(window, present(manual()), 'remove');
     const remove = await until(Zotero, () => root.querySelector<HTMLElement>('[data-rr-editor="remove"]'), 'keyboard removal confirmation');
+    await accessibility.capture('remove relationship', remove, { save: ['[data-rr-action="save"]', 'Confirm removal'],
+      cancel: ['[data-rr-action="cancel"]', 'Cancel'] });
     await reviewed(remove, 'save'); await driver.action(window, remove, 'save');
     await until(Zotero, () => !root.querySelector('[data-rr-editor]') && root.dataset.rrState === 'ready', 'keyboard removal saved');
     const removed = await checkpoint('removed');
@@ -107,11 +130,16 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     check(driver.events.some(event => event.type === 'input') && driver.events.some(event => event.type === 'click')
       && driver.events.every(event => event.trusted), 'Keyboard journey has missing or untrusted events');
     check(activeControl(window.document) === root.querySelector('[data-rr-action="add"]'), 'Keyboard removal did not restore Add focus');
+    await accessibility.focused('after removal', present(root.querySelector('[data-rr-action="add"]')));
+    accessibility.healthy();
     return { actualNativeKeyboard: true, unsignedIn: !Zotero.Users.getCurrentUserID(), initialFocusIsSetup: true,
-      validationErrorObserved: true, stages, steps: driver.steps, events: driver.events };
+      validationErrorObserved: true, stages, steps: driver.steps, events: driver.events,
+      accessibility: { panels: accessibility.panels, focus: accessibility.focus, events: accessibility.events,
+        errors: accessibility.errors, consumers: accessibility.service.getConsumers() } };
   } catch (error) {
     await io.writeUTF8(`${exchange}/error.json`, JSON.stringify({ message: error instanceof Error ? error.message : String(error),
-      stages, steps: driver.steps, events: driver.events }), { mode: 'create', flush: true });
+      stages, steps: driver.steps, events: driver.events, accessibility: { panels: accessibility.panels,
+        focus: accessibility.focus, events: accessibility.events, errors: accessibility.errors } }), { mode: 'create', flush: true });
     throw error;
-  } finally { driver.dispose(); }
+  } finally { try { accessibility.dispose(); } finally { driver.dispose(); } }
 }

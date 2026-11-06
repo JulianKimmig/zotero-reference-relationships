@@ -81,6 +81,8 @@ export interface TestPlatform extends ZoteroPlatform {
 }
 /** Actual privileged service registry passed to test modules, with no credential access. */
 export interface NativeServices {
+  obs: { addObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void;
+    removeObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void };
   env: { get(name: string): string };
   io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string } };
   prefs: { getStringPref(key: string): string }; startup: { eForceQuit: number; quit(flags: number): void };
