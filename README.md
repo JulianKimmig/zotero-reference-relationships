@@ -52,6 +52,39 @@ form's conditions and mappings; select them again before previewing. If library
 data changes during editing, cancel and reopen the rule to review the latest
 version.
 
+To back up or transfer relationship data, open **Reference Relationships** in
+Zotero's preferences and use **Backup and restore**:
+
+1. Select the export library and choose **Export to new file**. The JSON file
+   contains original relationships, metadata, type definitions and rules. Read-only
+   libraries can be exported. Existing files are never overwritten.
+2. To restore or transfer, select the target library, choose **Choose import file**,
+   then select **Merge** or **Replace**. Merge keeps identical records once and
+   rejects conflicting identities. Replace uses the complete imported authority.
+3. Review every endpoint mapping. Use **Choose reference…** to select the actual
+   target reference, or **Retain original inactive key** for an unavailable
+   original. Different owners require an explicit decision for every endpoint;
+   matching titles, DOIs or item keys do not automatically establish identity.
+4. Choose **Preview import** and inspect the before/after authority, projected
+   relationships, metadata, rules and retained-endpoint diagnostics. Review pages
+   preserve every captured field. Generated relationships are recomputed.
+5. Replacing an existing graph requires **Backup current graph to new file**.
+   Commit is enabled only after that complete backup has been written and verified.
+   Cancel discards a review before confirmation and leaves the import and backup
+   files in place. After choosing **Commit reviewed import**, wait for its result;
+   the target, operation and cancellation controls remain locked until it finishes.
+
+If the library, references or permissions change, prepare a fresh preview. A failed
+write is not acknowledged as a backup; choose a new filename for another attempt.
+Keep the original import and backup files until recovery is complete. Incomplete
+or conflicting synchronized authority blocks imports; finish synchronization and
+preserve all plugin-managed notes while resolving any persistent conflict.
+
+Relationship authority lives in standalone notes headed **Reference Relationships
+data** within its Zotero library. Disable or uninstall retains these notes and
+JSON backups. Ordinary Zotero translator exports are separate from this plugin's
+JSON backup format.
+
 The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
 
 Version `0.1.0` targets **Zotero 10.0.7 on Linux x86_64** only. The

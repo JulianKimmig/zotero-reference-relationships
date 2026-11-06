@@ -3,9 +3,11 @@ import type { Graph } from '../../src/domain/contracts.mts';
 import type { RepositoryState } from '../../src/storage/contracts.mts';
 import type { SourceOwner } from '../../src/transfer/contracts.mts';
 import type { TestGroups } from '../../scripts/contracts.mts';
+import type { TransferSyncFixture } from './transfer-sync-contracts.mts';
 
 /** The independent-process runner serializes only public fixture identity and test authority. */
 export interface ControllerJob {
+  transferFixture?: TransferSyncFixture;
   domainURI?: string; workloads?: Graph[];
   keys?: { personal: string; shared: string; restricted: string };
   action: string; groups: TestGroups; marker: string;
@@ -20,4 +22,5 @@ export interface ControllerJob {
   originalKey?: string; survivorKey?: string; erasedKey?: string; undoOriginalKey?: string; orphan?: string;
   undoNoteKey?: string; undoHash?: string; localURI?: string; recordHash?: string; itemKey?: string; expectedUserID?: number;
   owner?: SourceOwner; group?: SourceOwner; ambiguous?: { selected: string }; sync?: boolean; canonical?: string;
+  pickerPath?: string;
 }

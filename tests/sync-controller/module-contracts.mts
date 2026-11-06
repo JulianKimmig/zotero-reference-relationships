@@ -3,6 +3,19 @@ import type { AddonManagerModule, NativeAddon, TestItem } from './platform-contr
 
 /** Only actual native imports used by the production and test loaders are declared. */
 export interface NativeModuleLoader {
+  importESModule(uri: `resource://${string}/src/transfer/service.mjs`): typeof import('../../src/transfer/service.mts');
+  importESModule(uri: `resource://${string}/src/application/seed.mjs`): typeof import('../../src/application/seed.mts');
+  importESModule(uri: `resource://${string}/src/transfer/format.mjs`): typeof import('../../src/transfer/format.mts');
+  importESModule(uri: `resource://${string}/src/adapters/transfer-files.mjs`): typeof import('../../src/adapters/transfer-files.mts');
+  importESModule(uri: `resource://${string}/transfer-service.sys.mjs`): typeof import('./transfer-service.sys.mts');
+  importESModule(uri: `resource://${string}/transfer-mounted.sys.mjs`): typeof import('./transfer-mounted.sys.mts');
+  importESModule(uri: `resource://${string}/transfer-ui.sys.mjs`): typeof import('./transfer-ui.sys.mts');
+  importESModule(uri: 'chrome://zotero/content/modules/filePicker.mjs'): { FilePicker: import('../../src/adapters/transfer-picker.mts').NativeFilePickerConstructor };
+  importESModule(uri: `resource://${string}/transfer-files.sys.mjs`): typeof import('./transfer-files.sys.mts');
+  importESModule(uri: `resource://${string}/transfer-picker.sys.mjs`): typeof import('./transfer-picker.sys.mts');
+  importESModule(uri: `resource://${string}/transfer-sync.sys.mjs`): typeof import('./transfer-sync.sys.mts');
+  importESModule(uri: `resource://${string}/src/adapters/transfer-picker.mjs`): typeof import('../../src/adapters/transfer-picker.mts');
+  importESModule(uri: `resource://${string}/transfer-service-edges.sys.mjs`): typeof import('./transfer-service-edges.sys.mts');
   importESModule(uri: 'resource://gre/modules/AddonManager.sys.mjs'): AddonManagerModule;
   importESModule(uri: 'resource://gre/modules/addons/AddonUpdateChecker.sys.mjs'): { AddonUpdateChecker: {
     checkForUpdates(id: string, url: string, listener: { onUpdateCheckComplete(updates: object[]): void; onUpdateCheckError(status: number): void }): void;

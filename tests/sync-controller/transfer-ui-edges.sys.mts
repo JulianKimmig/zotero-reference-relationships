@@ -1,0 +1,84 @@
+/** Native stale/cancel/error/disposal and bounded-mapping transfer UI cases. */
+import { check, click, type, until } from './ui-helpers.sys.mts';
+import { present, readyState } from './evidence.sys.mts';
+import { action, openImport, preview, inputFile, settled, advancedKey } from './transfer-ui-fixtures.sys.mts';
+import type { TransferUIFixture } from './transfer-ui-fixtures.sys.mts';
+import type { ExportEnvelope } from '../../src/transfer/contracts.mts';
+import { rejects } from './ui-permissions.sys.mts';
+
+/** Verify separate native edge cases against exact saved authority, never injected source behavior. @param {object} f Native fixture. @param {object} document Complete valid source. @param {string} path Actual input path. @returns {Promise<void>} Assertions complete. */
+export async function transferUIEdges(f: TransferUIFixture, document: ExportEnvelope, path: string) {
+  const { root, window, panel, api, paths } = f;
+  await openImport(f, path); await preview(f); const canceledToken = present(panel.token);
+  type(window, root.querySelector<HTMLSelectElement>('[data-rr-transfer-operation]'), 'replace');
+  check(!root.querySelector('[data-rr-transfer-review]') && action(root, 'commit').disabled, 'Operation edit retained stale review');
+  await rejects(() => f.transfer.inspectImport(canceledToken), 'conflict');
+  type(window, root.querySelector<HTMLSelectElement>('[data-rr-transfer-operation]'), 'merge'); await preview(f);
+  const input = present(root.querySelector<HTMLInputElement>('[data-rr-transfer-target-key]'));
+  advancedKey(f, input, 'INVALID'); check(action(root, 'commit').disabled, 'Mapping edit retained token');
+  click(root, 'transfer-preview'); await settled(f);
+  check(!!panel.error.textContent && input.value === 'INVALID', 'Validation error discarded the mapping draft');
+  advancedKey(f, input, present(input.closest<HTMLElement>('[data-rr-transfer-source-key]')).dataset.rrTransferSourceKey!); await preview(f);
+  panel.nativeChange(); await settled(f);
+  check(action(root, 'commit').disabled && !!root.querySelector('[data-rr-transfer-mapping]'), 'Native change lost draft or retained stale review');
+  await preview(f);
+  const item = await api.Zotero.Items.getByLibraryAndKeyAsync(api.Zotero.Libraries.userLibraryID, document.snapshot.assertions[0].source.key);
+  check(item, 'Actual imported endpoint disappeared'); item.deleted = true; await item.saveTx();
+  click(root, 'transfer-commit'); await settled(f);
+  check(!!panel.error.textContent && action(root, 'commit').disabled, 'Stale native endpoint committed');
+  const row = present(root.querySelector<HTMLElement>(`[data-rr-transfer-source-key="${item.key}"]`));
+  type(window, row.querySelector<HTMLSelectElement>('[data-rr-transfer-mode]'), 'retain'); await preview(f);
+  check(root.querySelector('[data-rr-transfer-review]'), 'Explicit retained inactive endpoint cannot be reviewed');
+  item.deleted = false; await item.saveTx(); panel.nativeChange(); await settled(f);
+  click(root, 'transfer-cancel');
+  paths.push(null); click(root, 'transfer-import'); await settled(f);
+  check(!root.querySelector('[data-rr-transfer-mapping]'), 'Canceled picker created import draft');
+  const bad = `${f.job.data}/ui-invalid.json`; await present(api.IOUtils).writeUTF8(bad, '{}');
+  paths.push(bad); click(root, 'transfer-import'); await settled(f);
+  check(!!panel.error.textContent && !root.querySelector('[data-rr-transfer-mapping]'), 'Invalid file became a draft');
+  await openImport(f, path); await preview(f);
+  // A real competing authority head proves stale review refusal without an app/service mock.
+  const state = readyState(await f.app.read('self'));
+  await f.factory.repositoryFor('self', null).compareAndCommit(state.snapshot, state.head);
+  click(root, 'transfer-commit'); await settled(f);
+  check(!!panel.error.textContent && action(root, 'commit').disabled, 'Changed native authority head committed');
+  f.app.invalidate('self');
+  click(root, 'transfer-cancel');
+  const many = structuredClone(document.snapshot), source = many.assertions[0];
+  for (let index = 0; index < 30; index++) many.assertions.push({ ...structuredClone(source), id: `missing-${index}`,
+    source: { library: 'self', key: `ZZZZ${String(index).padStart(4, '0')}` } });
+  const { createExport } = api.ChromeUtils.importESModule('resource://rr-reconciliation-production/src/transfer/format.mjs');
+  const large = await createExport({ source: { kind: 'user', id: '123456' }, snapshot: many, exportedAt: document.exportedAt }, f.factory.digest);
+  await openImport(f, await inputFile(f, large, 'ui-paged'));
+  check(root.querySelectorAll('[data-rr-transfer-source-key]').length === 25 && action(root, 'preview').disabled, 'Mapping is not bounded/complete');
+  const first = present(root.querySelector<HTMLInputElement>('[data-rr-transfer-target-key]'));
+  advancedKey(f, first, 'ZZZZ9999'); click(root, 'transfer-mapping-next');
+  check(root.querySelectorAll('[data-rr-transfer-source-key]').length === 7 && action(root, 'preview').disabled, 'Second mapping page omitted endpoints');
+  click(root, 'transfer-mapping-previous');
+  check(present(root.querySelector<HTMLInputElement>('[data-rr-transfer-target-key]')).value === 'ZZZZ9999', 'Paging lost an endpoint draft');
+  click(root, 'transfer-cancel');
+  const group = new api.Zotero.Group({ groupID: 1991991, name: 'Transfer read-only target', description: '', version: 0, editable: true, filesEditable: true });
+  await group.saveTx();
+  const groupGraph = structuredClone(document.snapshot); groupGraph.library = 'group:1991991'; groupGraph.assertions = [];
+  await f.factory.repositoryFor('group:1991991', null).compareAndCommit(groupGraph, null);
+  group.editable = false; await group.saveTx();
+  panel.nativeChange(); await settled(f);
+  const selector = present(root.querySelector<HTMLSelectElement>('[data-rr-transfer-library]'));
+  type(window, selector, 'group:1991991'); await settled(f);
+  check(!action(root, 'export').disabled && action(root, 'import').disabled, 'Read-only ready group export/import permissions wrong');
+  paths.push(`${f.job.data}/ui-readonly-export.json`); click(root, 'transfer-export'); await settled(f);
+  check((await f.files.read(`${f.job.data}/ui-readonly-export.json`)).source.id === '1991991', 'Export did not bind actual selected owner');
+  await group.eraseTx(); panel.nativeChange(); await settled(f);
+  check(action(root, 'export').disabled && action(root, 'import').disabled && selector.value === 'group:1991991', 'Removed target switched library or remained usable');
+  await panel.load('self');
+  const canceled = api.Zotero.Promise.defer<string | null>(); paths.push(canceled.promise);
+  click(root, 'transfer-import'); await until(api.Zotero, () => root.getAttribute('aria-busy') === 'true', 'delayed picker busy');
+  click(root, 'transfer-cancel'); canceled.resolve(path); await settled(f); await api.Zotero.Promise.delay(75);
+  check(!root.querySelector('[data-rr-transfer-mapping]'), 'Canceled late picker recreated a draft');
+  const delayed = api.Zotero.Promise.defer<string | null>(); paths.push(delayed.promise);
+  const calls = f.calls.length; click(root, 'transfer-import');
+  action(root, 'import').click();
+  await until(api.Zotero, () => f.calls.length === calls + 1, 'one picker opened');
+  panel.dispose(); delayed.resolve(path); await api.Zotero.Promise.delay(75);
+  check(root.childElementCount === 0 && f.calls.length === calls + 1, 'Late/disposed picker recreated UI or repeated action');
+}

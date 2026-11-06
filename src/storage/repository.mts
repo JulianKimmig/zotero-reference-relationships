@@ -126,6 +126,18 @@ export class GraphRepository {
     return this.commit(snapshot, expectedRevision, false);
   }
 
+  /** Verify an unchanged ready merge under the shared queue and owned guarded native transaction without publishing. @param {string} expectedRevision Exact reviewed ready head. @returns {Promise<string>} Same current head after actual commit-time guards. */
+  async compareAndCheck(expectedRevision: string): Promise<string> {
+    check(typeof expectedRevision === 'string' && /^[A-Z0-9]{8}$/.test(expectedRevision), 'A ready expected revision is required');
+    try {
+      return await serialize(this.transport.identity, () => this.transport.transaction(async () => {
+        this.transport.assertWritable(); const current = await this.#readCurrent();
+        check(current.state === 'ready' && current.head === expectedRevision, 'Revision changed; review again', 'conflict');
+        return current.head;
+      }));
+    } catch (error) { this.invalidate(); throw storageError(error); }
+  }
+
   /** Publish an explicitly reviewed resolution of all observed complete heads. @param {object} snapshot Resolved snapshot. @param {string[]} expectedHeads All conflicting heads. @returns {Promise<string>} Committed manifest key. */
   async resolve(snapshot: unknown, expectedHeads: string[]) {
     check(Array.isArray(expectedHeads) && expectedHeads.length >= 2 &&

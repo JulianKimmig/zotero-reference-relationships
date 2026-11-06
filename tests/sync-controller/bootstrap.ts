@@ -91,6 +91,34 @@ async function execute() {
   if (syncJob.action.startsWith('transfer:')) {
     const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
     handler.setSubstitution('rr-transfer-tests', Services.io.newURI(controllerRootURI));
+    if (syncJob.action.startsWith('transfer:sync-')) {
+      const { transferSync } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-sync.sys.mjs');
+      return transferSync(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action.startsWith('transfer:picker-')) {
+      const { transferPicker } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-picker.sys.mjs');
+      return transferPicker(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action === 'transfer:mounted') {
+      const { transferMounted } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-mounted.sys.mjs');
+      return transferMounted(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action === 'transfer:ui') {
+      const { transferUI } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-ui.sys.mjs');
+      return transferUI(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action === 'transfer:files') {
+      const { transferFiles } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-files.sys.mjs');
+      return transferFiles(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action === 'transfer:service-edges') {
+      const { transferServiceEdges } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-service-edges.sys.mjs');
+      return transferServiceEdges(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
+    if (syncJob.action.startsWith('transfer:service')) {
+      const { transferService } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-service.sys.mjs');
+      return transferService(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    }
     if (syncJob.action.startsWith('transfer:review')) {
       const { transferReview } = ChromeUtils.importESModule('resource://rr-transfer-tests/transfer-review.sys.mjs');
       return transferReview(syncJob, { Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, synchronize });

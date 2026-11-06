@@ -81,6 +81,7 @@ export interface TestPlatform extends ZoteroPlatform {
 }
 /** Actual privileged service registry passed to test modules, with no credential access. */
 export interface NativeServices {
+  env: { get(name: string): string };
   io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string } };
   prefs: { getStringPref(key: string): string }; startup: { eForceQuit: number; quit(flags: number): void };
   uuid: { generateUUID(): { toString(): string } }; scriptloader: { loadSubScript(uri: string, scope: object): void };

@@ -7,6 +7,10 @@ export interface NativeAPI {
   Zotero: TestPlatform; Services: NativeServices; ChromeUtils: NativeModuleLoader;
   Components: { interfaces: { nsIResProtocolHandler: object } };
   DOMParser: typeof DOMParser; crypto: Crypto; TextEncoder: typeof TextEncoder;
-  IOUtils?: { readUTF8(path: string): Promise<string>; writeUTF8(path: string, text: string): Promise<void> };
+  IOUtils?: {
+    read(path: string, options: { maxBytes: number }): Promise<Uint8Array>;
+    readUTF8(path: string): Promise<string>;
+    writeUTF8(path: string, text: string, options?: { mode?: 'create' | 'overwrite'; flush?: boolean }): Promise<number>;
+  };
   synchronize(): Promise<void>;
 }

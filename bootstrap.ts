@@ -1,5 +1,5 @@
 /** Zotero lifecycle entrypoints with one isolated module generation and shared native application. */
-/* global Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder */
+/* global Zotero, Services, ChromeUtils, Components, DOMParser, crypto, TextEncoder, IOUtils */
 var relationshipRuntime: ReferenceRelationshipsHost.Runtime | undefined;
 var relationshipResource: string | undefined;
 
@@ -18,7 +18,8 @@ async function startup({ id, version, rootURI }: { id: string; version: string; 
   relationshipResource = `rr-${Services.uuid.generateUUID().toString().replace(/[^a-z0-9]/gi, '').toLowerCase()}`;
   handler.setSubstitution(relationshipResource, Services.io.newURI(rootURI));
   const { createPlugin } = ChromeUtils.importESModule(`resource://${relationshipResource}/src/runtime/plugin.mjs`);
-  const controller = createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncoder });
+  const { FilePicker } = ChromeUtils.importESModule('chrome://zotero/content/modules/filePicker.mjs');
+  const controller = createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncoder, IOUtils, FilePicker });
   relationshipRuntime = new scope.RelationshipRuntime({ id, version, controller });
   for (const window of Zotero.getMainWindows()) {
     relationshipRuntime!.addWindow(window);

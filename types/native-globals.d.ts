@@ -17,4 +17,8 @@ declare var Zotero: import('../tests/sync-controller/platform-contracts.mts').Te
 declare var ChromeUtils: import('../tests/sync-controller/module-contracts.mts').NativeModuleLoader;
 declare var Services: import('../tests/sync-controller/platform-contracts.mts').NativeServices;
 declare var Components: { interfaces: { nsIResProtocolHandler: object } };
-declare var IOUtils: { readUTF8(path: string): Promise<string>; writeUTF8(path: string, text: string): Promise<void> };
+declare var IOUtils: {
+  read(path: string, options: { maxBytes: number }): Promise<Uint8Array>;
+  readUTF8(path: string): Promise<string>;
+  writeUTF8(path: string, text: string, options?: { mode?: 'create' | 'overwrite'; flush?: boolean }): Promise<number>;
+};
