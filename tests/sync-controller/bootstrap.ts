@@ -240,10 +240,12 @@ async function execute() {
   throw new Error('Unknown native sync-probe action');
 }
 
-/** Write non-secret results and close the controlled client. @param {object} report Native output. @param {Error|null} error Failure. @returns {Promise<void>} */
-async function finish(report: unknown, error: unknown) {
+/** Write explicit success or failure, including falsy native exceptions, then close the controlled client. @param outcome Discriminated native execution result. @returns Non-secret result publication and normal quit completion. */
+async function finish(outcome: { ok: true; report: unknown } | { ok: false; error: unknown }) {
   await Zotero.DB.waitForTransaction();
-  const result = { ok: !error, report, error: error ? { name: error instanceof Error ? error.name : 'NativeFailure', message: error instanceof Error ? error.message : String(error) } : null,
+  const error = outcome.ok ? null : { name: outcome.error instanceof Error ? outcome.error.name : 'NativeFailure',
+    message: outcome.error instanceof Error ? outcome.error.message : String(outcome.error) };
+  const result = { ok: outcome.ok, report: outcome.ok ? outcome.report : null, error,
     profile: Zotero.Profile.dir, data: Zotero.DataDirectory.dir, version: Zotero.version,
     shutdown: 'native-attempt-quit-after-transactions' };
   await IOUtils.writeUTF8(syncJob.result, JSON.stringify(result, null, 2));
@@ -263,8 +265,8 @@ async function run() {
   try {
     check(Zotero.Profile.dir === syncJob.profile && Zotero.DataDirectory.dir === syncJob.data, 'Signed-in profile isolation mismatch');
     check(Zotero.version === '10.0.7', 'Unverified Zotero version');
-    await finish(await execute(), null);
-  } catch (error) { await finish(null, error); }
+    await finish({ ok: true, report: await execute() });
+  } catch (error) { await finish({ ok: false, error }); }
 }
 
 /** Schedule test work after native startup. @returns {void} */

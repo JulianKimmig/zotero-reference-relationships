@@ -10,8 +10,9 @@ import { randomUUID } from 'node:crypto';
 import { finished } from 'node:stream/promises';
 import { validateEnvironment, validateTransfer } from './protocol.mts';
 import { errorCode } from '../errors.mts';
+import { validateNativeJobResult } from './native-result.mts';
 import type { ChildProcess } from 'node:child_process';
-import type { EnvironmentReport, FixtureKeys, NativeJob, NativeOptions, NativeReport, NativeResult, SyncConfig, TransferReport } from '../contracts.mts';
+import type { EnvironmentReport, FixtureKeys, NativeJob, NativeOptions, NativeReport, SyncConfig, TransferReport } from '../contracts.mts';
 
 /** Reject invalid configuration before any profile mutation. @param {object} config Input. @returns {void} */
 export function validateConfig(config: unknown): asserts config is SyncConfig {
@@ -82,13 +83,10 @@ export async function nativeJob<T extends object = NativeReport>(options: Native
   child.stderr.pipe(log, { end: false });
   try {
     await awaitExit(child);
-    const result: NativeResult<T> = JSON.parse(await readFile(session.result, 'utf8'));
-    assert.equal(result.profile, client.profile, 'Profile isolation mismatch');
-    assert.equal(result.data, client.data, 'Data isolation mismatch');
-    assert.equal(result.version, '10.0.7', 'Unverified native version');
-    assert.equal(result.ok, true, `Native job failed: ${JSON.stringify(result.error)}`);
+    const result: unknown = JSON.parse(await readFile(session.result, 'utf8'));
+    const report = validateNativeJobResult<T>(result, client);
     await writeFile(join(options.root, `${role}-${job.action}.json`), JSON.stringify(result, null, 2));
-    return result.report;
+    return report;
   } finally {
     log.end();
     await finished(log);
