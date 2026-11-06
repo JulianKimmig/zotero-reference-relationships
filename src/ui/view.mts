@@ -64,7 +64,7 @@ export class RelationshipView {
     this.abort = new this.window.AbortController();
     if (!this.root) {
       this.root = element(this.document, 'div', { 'data-rr-pane': '' });
-      this.root.style.cssText = 'display:grid;gap:8px;padding:8px;font:inherit'; this.body.append(this.root);
+      this.root.style.cssText = 'display:grid;gap:8px;padding:8px;font:inherit;min-width:0;overflow-wrap:anywhere'; this.body.append(this.root);
     }
     this.ref = this.gateway.ref(this.item);
     this.root.dataset.rrItemKey = this.ref.key; this.root.dataset.rrState = 'loading';
@@ -171,6 +171,7 @@ export class RelationshipView {
     row.style.cssText = 'padding-block:8px;border-block-end:1px solid color-mix(in srgb,currentColor 20%,transparent)';
     row.append(element(this.document, 'p', {}, `${outgoing ? 'Outgoing' : 'Incoming'} · ${type.label} · ${manual ? generated ? 'Manual + generated' : 'Manual' : 'Generated'}`));
     const navigate = button(this.document, other.title, 'navigate', () => this.run(() => this.gateway.navigate(this.window, other.ref)), this.abort.signal);
+    navigate.style.cssText = 'max-inline-size:100%;white-space:normal;overflow-wrap:anywhere';
     navigate.disabled = other.status !== 'active'; row.append(navigate);
     const text = metadataText(edge.metadata, type); if (text) row.append(element(this.document, 'p', {}, text));
     if (generated) row.append(element(this.document, 'p', {}, `${edge.supports.length} rule support${edge.supports.length === 1 ? '' : 's'}. Generated values follow their explicit roots and rules.`));

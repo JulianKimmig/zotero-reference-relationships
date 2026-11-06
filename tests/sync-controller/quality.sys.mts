@@ -11,6 +11,7 @@ import { qualityKeyboardProbe } from './quality-keyboard-probe.sys.mts';
 import { qualityFocus } from './quality-focus.sys.mts';
 import { qualityKeyboardJourney } from './quality-keyboard-journey.sys.mts';
 import { qualityErrorFocus } from './quality-error-focus.sys.mts';
+import { qualityPresentation } from './quality-presentation.sys.mts';
 import { check } from './ui-helpers.sys.mts';
 
 /** Dispatch an exact explicitly selected quality case without silently substituting another test. @param {object} job Artifact-bound fresh anonymous native job. @param {object} api Real native host. @returns {Promise<object>} Actual case report; final process status is validated by the runner. */
@@ -28,6 +29,7 @@ export async function quality(job: ControllerJob, api: NativeAPI) {
   if (job.action === 'quality:focus') return qualityFocus(job, api);
   if (job.action === 'quality:keyboard-journey') return qualityKeyboardJourney(job, api);
   if (job.action === 'quality:error-focus') return qualityErrorFocus(job, api);
+  if (job.action === 'quality:presentation' || job.action === 'quality:presentation-read') return qualityPresentation(job, api);
   check(job.action === 'quality:shutdown-plugin' || job.action === 'quality:shutdown-baseline', 'Unknown native quality action');
   return qualityShutdown(job, api);
 }
