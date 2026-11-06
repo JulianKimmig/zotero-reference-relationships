@@ -27,6 +27,7 @@ export class RelationshipView {
   rendering: { generation: number; promise: Promise<void>; identity: string } | null;
   item?: NativeItem | null; context: SelectionContext | null = null;
   declare ref: ItemRef; declare t: Localizer; declare root: HTMLDivElement; declare list: HTMLDivElement; declare abort: AbortController;
+  readonly #explanations = new Map<HTMLElement, AbortController>();
   /** Bind actual section and shared application resources. @param {object} options {body,window,Zotero,app,gateway,dialogs,refresh,report,openRules}. */
   constructor(options: ViewOptions) {
     Object.assign(this, options); this.document = this.body.ownerDocument as NativeDocument;
@@ -54,7 +55,7 @@ export class RelationshipView {
     if (!this.needsShell || !this.item || this.disposed) return;
     this.needsShell = false;
     this.trace('shell');
-    if (this.abort) this.abort.abort();
+    this.clearExplanations(); if (this.abort) this.abort.abort();
     if (this.editor) { this.editor.dispose(); this.editor = null; }
     this.abort = new this.window.AbortController();
     if (!this.root) {
@@ -195,15 +196,23 @@ export class RelationshipView {
     this.editor = new BulkRemovalEditor(this, ids); this.root.append(this.editor.root);
   }
 
-  /** Explain actual current roots and rule versions, discarding responses after native selection/revision changes. @param {Element} row Owned relationship row. @param {object} edge Effective relationship. @returns {Promise<void>} */
+  /** Abort contributor handlers for every explanation removed with its owning selection or view. @returns {void} */
+  clearExplanations(): void {
+    for (const abort of this.#explanations.values()) abort.abort(); this.#explanations.clear();
+  }
+
+  /** Explain current contributors with a separate lifetime retired on hide, selection replacement or disposal. @param {Element} row Owned relationship row. @param {object} edge Effective relationship. @returns {Promise<void>} */
   async explain(row: HTMLElement, edge: Relationship): Promise<void> {
-    const existing = row.querySelector('[data-rr-provenance]'); if (existing) { existing.remove(); return; }
+    const existing = row.querySelector<HTMLElement>('[data-rr-provenance]');
+    if (existing) { this.#explanations.get(existing)?.abort(); this.#explanations.delete(existing); existing.remove(); return; }
     const generation = this.generation, state = await this.app.read(this.ref.library);
     check(state.state === 'ready' && state.head === this.context?.revision, 'Relationship data changed; refresh before explaining', 'conflict');
     const descriptions = await describeContributors(this.app, [edge], [state.snapshot]);
-    if (!this.current(generation) || !row.isConnected) return;
+    if (!this.current(generation) || !row.isConnected || row.querySelector('[data-rr-provenance]')) return;
     const details = element(this.document, 'section', { 'data-rr-provenance': '' });
-    provenance({ document: this.document, parent: details, edge, snapshot: state.snapshot, descriptions, t: this.t, signal: this.abort.signal });
+    const abort = new this.window.AbortController(); this.#explanations.set(details, abort);
+    this.abort.signal.addEventListener('abort', () => abort.abort(), { once: true, signal: abort.signal });
+    provenance({ document: this.document, parent: details, edge, snapshot: state.snapshot, descriptions, t: this.t, signal: abort.signal });
     row.append(details);
   }
 
@@ -257,7 +266,7 @@ export class RelationshipView {
   dispose() {
     if (this.disposed) return;
     this.disposed = true; this.generation++;
-    if (this.abort) this.abort.abort(); if (this.editor) this.editor.dispose();
+    this.clearExplanations(); if (this.abort) this.abort.abort(); if (this.editor) this.editor.dispose();
     if (this.root) this.root.remove();
     this.item = null;
   }

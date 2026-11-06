@@ -12,7 +12,10 @@ import type { PreviewOwner } from './contracts.mts';
 export async function rulePreview({ view, parent, before, review, signal, onError }: {
   view: PreviewOwner; parent: HTMLElement; before: Graph; review: Review; signal: AbortSignal; onError(error: unknown): void;
 }) {
-  const { document, t, app } = view, after = review.snapshot, delta = review.changeSet;
+  const { document, window, t, app } = view, after = review.snapshot, delta = review.changeSet;
+  const abort = new window.AbortController(); let pageAbort: AbortController | null = null;
+  if (signal.aborted) abort.abort();
+  else signal.addEventListener('abort', () => abort.abort(), { once: true, signal: abort.signal });
   let generation = 0, disposed = false, offset = 0;
   const container = element(document, 'div'); parent.replaceChildren(container);
   for (const rule of delta.rules.added) {
@@ -25,10 +28,10 @@ export async function rulePreview({ view, parent, before, review, signal, onErro
     container.append(element(document, 'h4', {}, t('removed'))); ruleDefinition({ document, parent: container, rule, snapshot: before, t });
   }
   if (delta.derived === null) {
-    const impact = projectionReview({ view, parent: container, review, signal });
+    const impact = projectionReview({ view, parent: container, review, signal: abort.signal });
     return {
       /** Dispose only this complete conflict review's owned resources. @returns {void} */
-      dispose() { impact.dispose(); container.remove(); },
+      dispose() { abort.abort(); impact.dispose(); container.remove(); },
     };
   }
   parent.dataset.rrAdded = String(delta.derived.added.length); parent.dataset.rrUpdated = String(delta.derived.updated.length);
@@ -39,13 +42,16 @@ export async function rulePreview({ view, parent, before, review, signal, onErro
     ...delta.derived.removed.map(edge => ({ kind: 'removed', before: edge }))];
   if (!impacts.length && !delta.rules.added.length && !delta.rules.updated.length && !delta.rules.removed.length) container.append(element(document, 'p', {}, t('no-changes')));
   const body = element(document, 'div'), paging = element(document, 'div'); container.append(body, paging);
-  const owner = { document, t, signal };
+  const owner = { document, t, signal: abort.signal };
   const previous = ruleButton(owner, 'previous', 'impact-previous', () => { offset -= 25; page().catch(onError); });
   const next = ruleButton(owner, 'next', 'impact-next', () => { offset += 25; page().catch(onError); });
   paging.append(previous, next); paging.hidden = impacts.length <= 25;
 
-  /** Paint one bounded page immediately, then fill native titles and exact support details for that generation. @returns {Promise<void>} */
+  /** Retire the preceding contributor page, paint bounded cards and resolve only this live page's titles/supports. @returns {Promise<void>} */
   async function page() {
+    if (disposed || abort.signal.aborted) return;
+    pageAbort?.abort(); const currentPage = new window.AbortController(); pageAbort = currentPage;
+    abort.signal.addEventListener('abort', () => currentPage.abort(), { once: true, signal: currentPage.signal });
     const token = ++generation, selected = impacts.slice(offset, offset + 25), cards: HTMLElement[] = [];
     parent.setAttribute('aria-busy', 'true');
     body.replaceChildren(); previous.disabled = offset === 0; next.disabled = offset + 25 >= impacts.length;
@@ -55,21 +61,21 @@ export async function rulePreview({ view, parent, before, review, signal, onErro
     }
     const edges = selected.flatMap(impact => [impact.before, impact.after].filter(edge => edge !== undefined));
     const descriptions = await describeContributors(app, edges, [before, after]);
-    if (disposed || signal.aborted || token !== generation) return;
+    if (disposed || currentPage.signal.aborted || token !== generation) return;
     selected.forEach((impact, index) => {
       for (const [key, snapshot] of [['before', before], ['after', after]] as const) {
         const edge = impact[key]; if (!edge) continue;
         const section = element(document, 'section'), type = snapshot.types.find(type => type.id === edge.type)!;
         section.append(element(document, 'p', {}, `${t(key)}: ${descriptions.get(JSON.stringify(edge.source))!.title} → ${type.label} (${type.id}) → ${descriptions.get(JSON.stringify(edge.target))!.title}`));
         section.append(element(document, 'p', {}, metadataText(edge.metadata, type)));
-        provenance({ document, parent: section, edge, snapshot, descriptions, t, signal }); cards[index].append(section);
+        provenance({ document, parent: section, edge, snapshot, descriptions, t, signal: currentPage.signal }); cards[index].append(section);
       }
     });
     parent.setAttribute('aria-busy', 'false');
   }
   await page();
   return {
-    /** Discard only this preview's DOM; a late page must never clear a newer preview. @returns {void} */
-    dispose() { disposed = true; generation++; container.remove(); },
+    /** Abort the preview and its current contributor page before removing only owned DOM; late responses remain inert. @returns {void} */
+    dispose() { disposed = true; generation++; abort.abort(); pageAbort?.abort(); container.remove(); },
   };
 }

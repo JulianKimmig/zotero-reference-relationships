@@ -238,7 +238,7 @@ export class RelationshipApplication {
   /**
    * Recompute review and commit through the parent's real transaction guard decorator.
    * @param {object} command Full replacement command. @param {string|null} expectedRevision Reviewed head.
-   * @returns {Promise<object>} {revision,changeSet} after atomic publication and a fresh read.
+   * @returns {Promise<object>} {revision,changeSet} after atomic publication; subsequent teardown cannot turn that committed write into rejection.
    */
   async apply(command: Draft['command'], expectedRevision: string|null) { this.#active(); return this.#apply(command, expectedRevision, this.#repositoryFor!, null); }
 
@@ -264,7 +264,7 @@ export class RelationshipApplication {
     let revision;
     try { revision = await repository.compareAndCommit(preview.snapshot, expectedRevision); }
     catch (error) { this.invalidate(scope); throw error; }
-    this.invalidate(scope); await this.read(scope);
+    this.invalidate(scope);
     return { revision, changeSet: preview.changeSet };
   }
 

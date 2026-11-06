@@ -7,6 +7,7 @@ import type { TransferSyncFixture } from './transfer-sync-contracts.mts';
 
 /** The independent-process runner serializes only public fixture identity and test authority. */
 export interface ControllerJob {
+  qualityWorkloads?: import('./quality-performance.sys.mts').QualityWorkload[];
   transferFixture?: TransferSyncFixture;
   domainURI?: string; workloads?: Graph[];
   keys?: { personal: string; shared: string; restricted: string };

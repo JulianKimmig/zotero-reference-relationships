@@ -3,6 +3,11 @@ import type { AddonManagerModule, NativeAddon, TestItem } from './platform-contr
 
 /** Only actual native imports used by the production and test loaders are declared. */
 export interface NativeModuleLoader {
+  importESModule(uri: `resource://${string}/quality.sys.mjs`): typeof import('./quality.sys.mts');
+  importESModule(uri: `resource://${string}/quality-performance.sys.mjs`): typeof import('./quality-performance.sys.mts');
+  importESModule(uri: `resource://${string}/quality-lifetimes.sys.mjs`): typeof import('./quality-lifetimes.sys.mts');
+  importESModule(uri: `resource://${string}/quality-postcommit.sys.mjs`): typeof import('./quality-postcommit.sys.mts');
+  importESModule(uri: `resource://${string}/src/domain/graph-contract.mjs`): typeof import('../../src/domain/graph-contract.mts');
   importESModule(uri: `resource://${string}/src/transfer/service.mjs`): typeof import('../../src/transfer/service.mts');
   importESModule(uri: `resource://${string}/src/application/seed.mjs`): typeof import('../../src/application/seed.mts');
   importESModule(uri: `resource://${string}/src/transfer/format.mjs`): typeof import('../../src/transfer/format.mts');
