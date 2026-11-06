@@ -28,7 +28,7 @@ export async function transferUIFixture(job: ControllerJob, api: NativeAPI) {
   const identity = createTransferIdentity({ Zotero, gateway: production.gateway }), app = Zotero.ReferenceRelationships!.application;
   const transfer = new TransferService({ gateway: production.gateway, identity, files, digest: factory.digest,
     repositoryFor: factory.repositoryFor, repositoryForEvent: factory.repositoryForEvent,
-    now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope) });
+    now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope), yieldToHost: () => Zotero.Promise.delay(0) });
   const window = Zotero.getMainWindow(), root = window.document.createElementNS('http://www.w3.org/1999/xhtml', 'section') as HTMLElement;
   window.document.documentElement.append(root);
   const paths: (string | null | Promise<string | null>)[] = [], calls: string[] = [], errors: unknown[] = [];

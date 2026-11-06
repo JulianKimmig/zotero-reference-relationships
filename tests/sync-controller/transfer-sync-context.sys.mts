@@ -24,7 +24,7 @@ export async function transferSyncContext(job: ControllerJob, api: NativeAPI) {
   const identity = createTransferIdentity({ Zotero, gateway }), app = Zotero.ReferenceRelationships!.application;
   const files = createTransferFiles({ io: present(api.IOUtils), digest: factory.digest });
   const transfer = new TransferService({ gateway, identity, files, repositoryFor: factory.repositoryFor,
-    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), invalidate: library => app.invalidate(library) });
+    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), invalidate: library => app.invalidate(library), yieldToHost: () => Zotero.Promise.delay(0) });
   const repository = factory.repositoryFor(scope, null);
 
   /** Execute actual native sync only for this shared group; no authentication material or unrelated libraries are read by the harness. @returns {Promise<object>} Native result and public error categories. */

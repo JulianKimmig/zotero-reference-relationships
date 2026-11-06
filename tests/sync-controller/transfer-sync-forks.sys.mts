@@ -106,7 +106,7 @@ export async function transferSyncForks(job: ForkJob, api: NativeAPI, context: T
       }
       const { LifecycleProjection } = api.ChromeUtils.importESModule('resource://rr-reconciliation-production/src/application/lifecycle.mjs');
       const { reviewTransfer } = api.ChromeUtils.importESModule('resource://rr-reconciliation-production/src/transfer/review.mjs');
-      const lifecycle = new LifecycleProjection(context.gateway, context.factory.digest), choices = await mapping(context, snapshot);
+      const lifecycle = new LifecycleProjection(context.gateway, context.factory.digest, { batchSize: 256, yieldToHost: () => api.Zotero.Promise.delay(0), assertActive: () => check(!!api.Zotero.ReferenceRelationships, 'Native plugin lifetime ended') }), choices = await mapping(context, snapshot);
       const observed = await lifecycle.observe([rule.snapshot, assertion.snapshot, snapshot]);
       const review = reviewTransfer(rule.snapshot, snapshot, choices, observed.rows);
       const otherReview = reviewTransfer(assertion.snapshot, snapshot, choices, observed.rows);

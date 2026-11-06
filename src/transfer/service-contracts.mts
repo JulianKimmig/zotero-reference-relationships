@@ -17,7 +17,7 @@ export type TransferRepositoryFactory = (scope: string, guard: WriteGuard | null
 export interface TransferOptions {
   gateway: ApplicationGateway; identity: TransferIdentity; files: TransferFiles;
   repositoryFor: TransferRepositoryFactory; repositoryForEvent: TransferRepositoryFactory;
-  digest: Digest; now(): string; invalidate(scope: string): void;
+  digest: Digest; now(): string; invalidate(scope: string): void; yieldToHost(): Promise<void>;
 }
 /** Complete detached import report is separate from the opaque token returned by preview. */
 export type TransferReview = ReturnType<typeof reviewTransfer>;

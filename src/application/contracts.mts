@@ -52,7 +52,7 @@ export type RepositoryFactory = (scope: string, guard: WriteGuard | null) => Rep
 /** Actual application composition dependencies. */
 export interface ApplicationOptions {
   gateway: ApplicationGateway; repositoryFor: RepositoryFactory; repositoryForEvent: RepositoryFactory;
-  digest: Digest; now: () => string; newID: () => string;
+  digest: Digest; now: () => string; newID: () => string; yieldToHost(): Promise<void>;
 }
 /** Selection context remains small and has no whole snapshot. */
 export interface SelectionContext {

@@ -61,7 +61,7 @@ export interface ZoteroPlatform {
   Relations: { replacedItemPredicate: string; getByPredicateAndObject(kind: string, predicate: string, uri: string): Promise<NativeItem[]> };
   URI: { getLibraryURI(id: number): string };
   Users: { getCurrentUserID(): number | null | undefined; getLocalUserKey(): string };
-  Promise: { defer<T = void>(): Deferred<T> };
+  Promise: { defer<T = void>(): Deferred<T>; delay(milliseconds: number): Promise<void> };
   debug(message: string): void; logError(error: unknown): void; getMainWindows(): NativeWindow[];
   ItemPaneManager: {
     registerSection(options: {

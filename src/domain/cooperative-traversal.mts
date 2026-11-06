@@ -25,9 +25,9 @@ export function validateCooperation(cooperation: EvaluationCooperation): void {
  * Scheduler rejection and cancellation propagate unchanged; collectors remain private until full completion.
  * @param steps Shared rooted traversal with one bounded work unit per yielded boundary.
  * @param cooperation Validated required host scheduler, activity callback and batch size.
- * @returns Completed global matching-transition count; no intermediate result is returned.
+ * @returns Completed stepper result; no intermediate result is returned.
  */
-export async function finishTraversalAsync(steps: Generator<void, number, void>, cooperation: EvaluationCooperation): Promise<number> {
+export async function finishTraversalAsync<T>(steps: Generator<void, T, void>, cooperation: EvaluationCooperation): Promise<T> {
   let count = 0;
   while (true) {
     cooperation.assertActive();

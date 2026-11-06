@@ -1,9 +1,11 @@
 /** Native-state-bound projected reads and complete conflict-aware change review without authority rewrites. */
 import { ContractError, check, jsonCopy } from '../domain/values.mts';
 import { validateGraph, edgeKey } from '../domain/graph-contract.mts';
-import { inspectEndpoints } from '../domain/inspect-endpoints.mts';
+import { inspectEndpoints, inspectEndpointsAsync } from '../domain/inspect-endpoints.mts';
+import { validateCooperation } from '../domain/cooperative-traversal.mts';
+import type { EvaluationCooperation } from '../domain/cooperative-traversal.mts';
 import { canonicalJSON } from '../storage/canonical.mts';
-import { entityDelta } from './changes.mts';
+import { entityDelta, entityDeltaAsync } from './changes.mts';
 import type { Assertion, Digest, Edge, Graph, ItemRef } from '../domain/contracts.mts';
 import type { EndpointResolution, ProjectionReport } from '../domain/projection-contracts.mts';
 import type { ApplicationGateway, EntityDelta } from './contracts.mts';
@@ -20,6 +22,13 @@ function inspect(snapshot: Graph, rows: EndpointResolution[]): ProjectionReport 
   const keys = new Set(references([snapshot]).map(ref => canonicalJSON(ref)));
   return inspectEndpoints(snapshot, rows.filter(row => keys.has(canonicalJSON(row.original)))
     .map(({ original, resolved, status }) => ({ original, resolved, status })));
+}
+
+/** Inspect only one graph's detached endpoint subset while cooperating with the real host. @param snapshot Valid authority. @param rows Complete observation union. @param cooperation Explicit owner scheduling/liveness. @returns Complete projected inspection without a synchronous closure fallback. */
+export async function inspectObservedAsync(snapshot: Graph, rows: EndpointResolution[], cooperation: EvaluationCooperation): Promise<ProjectionReport> {
+  const keys = new Set(references([snapshot]).map(ref => canonicalJSON(ref)));
+  return inspectEndpointsAsync(snapshot, rows.filter(row => keys.has(canonicalJSON(row.original)))
+    .map(({ original, resolved, status }) => ({ original, resolved, status })), cooperation);
 }
 
 /** Reject aggregate ambiguity after a proposal with deterministic original contributor witnesses. @param {object} report Complete after inspection. @returns {void} */
@@ -61,26 +70,35 @@ function validateWrites(before: Graph, after: Graph, delta: EntityDelta<Assertio
 
 /** Bind native observations and complete projections to the existing guarded application transaction. */
 export class LifecycleProjection {
-  readonly gateway: ApplicationGateway;
+  readonly gateway: Pick<ApplicationGateway, 'inspect'>;
   readonly digest: Digest;
-  /** Require actual gateway resolution and real SHA-256 composition. @param {object} gateway Native item gateway. @param {Function} digest Async SHA-256 over UTF-8. */
-  constructor(gateway: ApplicationGateway, digest: Digest) { check(typeof gateway.inspect === 'function' && typeof digest === 'function', 'Explicit lifecycle dependencies required'); this.gateway = gateway; this.digest = digest; }
+  readonly cooperation: EvaluationCooperation;
+  /** Require actual native inspection, SHA-256 and explicit host scheduling/liveness. @param gateway Native observation port. @param digest Actual SHA-256. @param cooperation Host work quantum and throwing lifetime check. */
+  constructor(gateway: Pick<ApplicationGateway, 'inspect'>, digest: Digest, cooperation: EvaluationCooperation) {
+    check(typeof gateway.inspect === 'function' && typeof digest === 'function', 'Explicit lifecycle dependencies required');
+    validateCooperation(cooperation); this.gateway = gateway; this.digest = digest; this.cooperation = cooperation;
+  }
 
   /** Observe all semantic endpoint facts without storing titles or native numeric IDs. @param {object[]} snapshots Current/proposed authority. @returns {Promise<object>} Detached {rows,endpointRevision}. */
   async observe(snapshots: { assertions: readonly Edge[] }[]) {
+    this.cooperation.assertActive(); let count = 0;
     const rows: (EndpointResolution & { editable: boolean })[] = [];
     for (const ref of references(snapshots)) {
+      this.cooperation.assertActive();
       const { original, resolved, status, editable } = await this.gateway.inspect(ref);
+      this.cooperation.assertActive();
       check(typeof editable === 'boolean', 'Native endpoint permission must be explicit');
       rows.push({ original, resolved, status, editable } as EndpointResolution & { editable: boolean });
+      if (++count % this.cooperation.batchSize === 0) { await this.cooperation.yieldToHost(); this.cooperation.assertActive(); }
     }
-    return { rows: jsonCopy(rows), endpointRevision: await this.digest(canonicalJSON(rows)) };
+    const endpointRevision = await this.digest(canonicalJSON(rows)); this.cooperation.assertActive();
+    return { rows: jsonCopy(rows), endpointRevision };
   }
 
   /** Inspect one current authority for a native-state-dependent application view. @param {object} snapshot Current valid graph. @returns {Promise<object>} Complete report and endpoint binding. */
   async current(snapshot: Graph) {
     const observation = await this.observe([snapshot]);
-    return { ...observation, report: inspect(snapshot, observation.rows) };
+    return { ...observation, report: await inspectObservedAsync(snapshot, observation.rows, this.cooperation) };
   }
 
   /** Review complete current/proposed projections; conflicted before-state remains explicit. @param {object} before Current valid authority. @param {object} after Proposed valid authority. @returns {Promise<object>} ChangeSet, complete projection sides, endpoint binding and commit-time eligibility references. */
@@ -88,9 +106,10 @@ export class LifecycleProjection {
     const current = validateGraph(before), proposed = validateGraph(after), observation = await this.observe([current, proposed]);
     check(current.library === proposed.library, 'Cannot review graphs from different libraries');
     const assertions = entityDelta(current.assertions, proposed.assertions, 'id'); validateWrites(current, proposed, assertions, observation.rows);
-    const previous = inspect(current, observation.rows), next = inspect(proposed, observation.rows); requireReady(next);
+    const previous = await inspectObservedAsync(current, observation.rows, this.cooperation);
+    const next = await inspectObservedAsync(proposed, observation.rows, this.cooperation); requireReady(next);
     const rules = entityDelta(current.rules, proposed.rules, 'id');
-    const derived = previous.state === 'ready' ? entityDelta(previous.relationships, next.relationships, 'key') : null;
+    const derived = previous.state === 'ready' ? await entityDeltaAsync(previous.relationships, next.relationships, 'key', this.cooperation) : null;
     const diagnostics = new Map([...previous.diagnostics, ...next.diagnostics].map(value => [canonicalJSON(value), value]));
     if (previous.state === 'conflict') diagnostics.set('projection-conflict', { code: 'projection-conflict',
       message: 'Current projected relationships have conflicting contributors; review the complete before and after states', details: {} });

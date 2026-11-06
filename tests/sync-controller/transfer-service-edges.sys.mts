@@ -25,7 +25,7 @@ export async function transferServiceEdges(job: ControllerJob, api: NativeAPI) {
   check(!!api.IOUtils, 'Actual IOUtils required');
   const files = createTransferFiles({ io: api.IOUtils, digest: factory.digest });
   const options: TransferOptions = { gateway: production.gateway, identity, files, repositoryFor: factory.repositoryFor,
-    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope) };
+    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope), yieldToHost: () => Zotero.Promise.delay(0) };
   const a = await book(Zotero, `${job.marker} source`), b = await book(Zotero, `${job.marker} target`);
   const graph = initialGraph('self');
   graph.assertions.push({ id: 'guard-root', source: ref(a), target: ref(b), type: 'referencing', metadata: { note: 'Guard original' },

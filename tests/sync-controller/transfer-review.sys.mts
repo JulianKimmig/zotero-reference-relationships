@@ -43,7 +43,7 @@ async function runTransferReview(job: ControllerJob, api: NativeAPI) {
   const { createRepositoryFactory } = ChromeUtils.importESModule('resource://rr-reconciliation-production/src/adapters/repositories.mjs');
   const { createTransferIdentity } = ChromeUtils.importESModule('resource://rr-reconciliation-production/src/adapters/transfer-identity.mjs');
   const factory = createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway: production.gateway });
-  const lifecycle = new LifecycleProjection(production.gateway, factory.digest), owner = createTransferIdentity({ Zotero, gateway: production.gateway }).read('self');
+  const lifecycle = new LifecycleProjection(production.gateway, factory.digest, { batchSize: 256, yieldToHost: () => Zotero.Promise.delay(0), assertActive: () => check(!!Zotero.ReferenceRelationships, 'Native plugin lifetime ended') }), owner = createTransferIdentity({ Zotero, gateway: production.gateway }).read('self');
   const a = await book(Zotero, `${job.marker} original`), b = await book(Zotero, `${job.marker} target`), c = await book(Zotero, `${job.marker} independent`);
   await applyOne(api, await app.draftCreate({ source: ref(a), target: ref(b), type: 'referencing', metadata: { note: 'Café 你好 <b>literal</b>' } }));
   const { version, ...definition } = rule('transfer-inverse');

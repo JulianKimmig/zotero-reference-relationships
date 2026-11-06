@@ -40,7 +40,7 @@ export async function transferService(job: ControllerJob, api: NativeAPI) {
   const app = Zotero.ReferenceRelationships!.application;
   const transfer = new TransferService({ gateway: production.gateway, identity, files,
     repositoryFor: factory.repositoryFor, repositoryForEvent: factory.repositoryForEvent,
-    digest: factory.digest, now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope) });
+    digest: factory.digest, now: () => new Date().toISOString(), invalidate: scope => app.invalidate(scope), yieldToHost: () => Zotero.Promise.delay(0) });
   const repository = factory.repositoryFor('self', null);
   if (job.action === 'transfer:service-inspect') {
     const state = await repository.read(), owner = identity.read('self');

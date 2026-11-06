@@ -24,7 +24,7 @@ async function stopAtDigest(api: NativeAPI, gateway: ItemGateway, draft: Draft, 
   }
   const app = new RelationshipApplication({ gateway, repositoryFor: repositories.repositoryFor,
     repositoryForEvent: repositories.repositoryForEvent, digest: delayedDigest,
-    now: () => new Date().toISOString(), newID: () => window.crypto.randomUUID() });
+    now: () => new Date().toISOString(), newID: () => window.crypto.randomUUID(), yieldToHost: () => Zotero.Promise.delay(0) });
   const before = await Zotero.ReferenceRelationships!.application.read('self'), count = await commits(api);
   const operation = ordinal === 1 ? app.preview(draft.command, draft.expectedRevision)
     : app.applyFromEvent(draft.command, draft.expectedRevision);

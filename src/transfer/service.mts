@@ -6,7 +6,7 @@ import { LifecycleProjection } from '../application/lifecycle.mts';
 import { createExport, verifyExport } from './format.mts';
 import { mapSnapshot } from './mapping.mts';
 import { mergeSnapshots } from './proposal.mts';
-import { reviewTransfer } from './review.mts';
+import { reviewTransferAsync } from './review.mts';
 import { ImportTokens } from './tokens.mts';
 import type { Graph } from '../domain/contracts.mts';
 import type { RepositoryState } from '../storage/contracts.mts';
@@ -28,7 +28,8 @@ export class TransferService {
 
   /** Bind actual native ownership, notes and filesystem ports. @param {object} options Native transfer dependencies and application invalidation. */
   constructor(options: TransferOptions) {
-    this.#options = options; this.#lifecycle = new LifecycleProjection(options.gateway, options.digest);
+    this.#options = options; this.#lifecycle = new LifecycleProjection(options.gateway, options.digest,
+      { yieldToHost: options.yieldToHost, assertActive: () => this.#active(), batchSize: 256 });
   }
 
   /** Refuse operations after teardown. @returns {void} */
@@ -61,7 +62,7 @@ export class TransferService {
     check(canonicalJSON(owner.owner) === canonicalJSON(mapped.mapping.target), 'Explicit mapping does not select the actual native owner', 'conflict');
     const before = currentGraph(await this.#options.repositoryFor(scope, null).read(), expectedRevision);
     const proposed = mergeSnapshots(before, mapped.snapshot, operation), observation = await this.#lifecycle.observe(before ? [before, proposed] : [proposed]);
-    const review = reviewTransfer(before, proposed, mapped.mapping, observation.rows);
+    const review = await reviewTransferAsync(before, proposed, mapped.mapping, observation.rows, this.#lifecycle.cooperation);
     await this.#options.gateway.assertWritable(scope, review.refs); this.#active(); owner.assertCurrent();
     currentGraph(await this.#options.repositoryFor(scope, null).read(), expectedRevision); this.#active();
     check(canonicalJSON(document, { maxBytes: 2_097_152 }) === signature && canonicalJSON(inputMapping) === mappingSignature,

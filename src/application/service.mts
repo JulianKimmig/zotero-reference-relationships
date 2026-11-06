@@ -33,12 +33,12 @@ export class RelationshipApplication {
    * @param {object} options {gateway,repositoryFor,repositoryForEvent,digest,now,newID}; factories bind strict/event native transaction boundaries.
    * @returns {RelationshipApplication} Application sharing repository identity and writer/cache ownership.
    */
-  constructor({ gateway, repositoryFor, repositoryForEvent, digest, now, newID }: ApplicationOptions) {
+  constructor({ gateway, repositoryFor, repositoryForEvent, digest, now, newID, yieldToHost }: ApplicationOptions) {
     check(!!gateway && (['describe', 'assertWritable', 'ref'] as const).every(name => typeof gateway[name] === 'function'),
       'Explicit item gateway required');
     check([repositoryFor, repositoryForEvent, now, newID].every(value => typeof value === 'function'), 'Explicit repository boundaries, clock and ID functions required');
     this.#gateway = gateway; this.#repositoryFor = repositoryFor; this.#repositoryForEvent = repositoryForEvent; this.#now = now; this.#newID = newID;
-    this.#lifecycle = new LifecycleProjection(gateway, digest);
+    this.#lifecycle = new LifecycleProjection(gateway, digest, { yieldToHost, assertActive: () => this.#active(), batchSize: 256 });
   }
 
   /** Reject operations after teardown. @returns {void} Throws a visible failure. */

@@ -34,7 +34,19 @@ export async function qualityApplication(job: ControllerJob, api: NativeAPI) {
   const books = await nativeBooks(api, original.assertions.length + 1), graph = structuredClone(original);
   graph.types.find(type => type.id === 'referencing')!.fields = [{ id: 'note', kind: 'string', label: 'Note', required: false, options: [] }];
   graph.assertions.forEach((root, index) => { root.source = ref(books[index + 1]); root.target = ref(books[0]); });
-  const head = await factory.repositoryFor('self', null).compareAndCommit(graph, null); app.invalidateAll();
+  let head: string;
+  // This controller is an independent native event, not a database transaction callback.
+  // Queue its own guarded transaction behind background item/notifier work rather than weakening strict writers.
+  const writer = factory.repositoryForEvent('self', async () => { await production.gateway.assertWritable('self', books.map(ref)); });
+  try { head = await writer.compareAndCommit(graph, null); }
+  catch (error) {
+    await present(api.IOUtils).writeUTF8(`${present(job.data)}/quality-initial-publication-failure.json`, JSON.stringify({
+      phase: 'initial-fixture-publication', inTransaction: Zotero.DB.inTransaction(), state: await app.read('self'),
+      manifests: await Zotero.DB.valueQueryAsync('SELECT COUNT(*) FROM itemNotes WHERE note LIKE ?', ['%reference-relationships/commit%']),
+    }), { mode: 'create', flush: true });
+    throw error;
+  }
+  app.invalidateAll();
   const state = readyState(await app.read('self')); check(state.head === head, 'Native workload head changed');
   const anchor = ref(books[0]), expectedTotal = graph.assertions.length * (shape === 'sparse' ? 1 : 2);
   const coldProjection = await measureNative(api, async () => {

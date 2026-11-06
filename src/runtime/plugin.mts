@@ -25,13 +25,13 @@ export function createPlugin({ id, rootURI, Zotero, DOMParser, crypto, TextEncod
   const application = new RelationshipApplication({ gateway, repositoryFor: repositories.repositoryFor,
     repositoryForEvent: repositories.repositoryForEvent,
     digest: repositories.digest,
-    now: () => new Date().toISOString(), newID: () => crypto.randomUUID() });
+    now: () => new Date().toISOString(), newID: () => crypto.randomUUID(), yieldToHost: () => Zotero.Promise.delay(0) });
   const report = (error: unknown) => Zotero.logError(error);
   const identity = createTransferIdentity({ Zotero, gateway }), files = createTransferFiles({ io: IOUtils, digest: repositories.digest });
   const picker = createTransferPicker(FilePicker);
   const transfer = new TransferService({ gateway, identity, files, repositoryFor: repositories.repositoryFor,
     repositoryForEvent: repositories.repositoryForEvent, digest: repositories.digest, now: () => new Date().toISOString(),
-    invalidate: scope => application.invalidate(scope) });
+    invalidate: scope => application.invalidate(scope), yieldToHost: () => Zotero.Promise.delay(0) });
   const preferences = createPreferences({ Zotero, id, rootURI, app: application, gateway, report, transfer, identity, files, picker });
   const ui = registerInterface({ Zotero, id, rootURI, application, gateway, report,
     openRules: library => preferences.open(library), onNativeChange: () => preferences.nativeChange() });

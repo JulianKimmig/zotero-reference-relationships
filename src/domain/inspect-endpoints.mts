@@ -1,14 +1,16 @@
 /** Strict original evidence inspection when native merge resolution cannot establish a complete graph. */
 import { check, exact, jsonCopy } from './values.mts';
 import { validateGraph, validateItemRef } from './graph-contract.mts';
-import { inspectProjection } from './evaluate.mts';
+import { inspectProjection, inspectProjectionAsync } from './evaluate.mts';
+import { validateCooperation } from './cooperative-traversal.mts';
+import type { EvaluationCooperation } from './cooperative-traversal.mts';
 import type { ItemRef } from './contracts.mts';
 import type { EndpointResolution, ProjectionReport } from './projection-contracts.mts';
 
 const unresolved = new Set(['ambiguous', 'cyclic', 'alias-limit']);
 
-/** Validate complete endpoint evidence and preserve unknown aggregate state without choosing aliases. @param {object} snapshot Strict original graph. @param {object[]} input Exactly one {original,resolved,status} observation per original endpoint. @returns {object} Existing complete projection report or endpoint-conflict with null aggregates and complete originals. */
-export function inspectEndpoints(snapshot: unknown, input: unknown): ProjectionReport {
+/** Validate and detach complete endpoint evidence before either synchronous or cooperative inspection. @param {object} snapshot Strict original graph. @param {object[]} input Complete observation DTOs. @returns {object} Valid graph/rows and any explicit unresolved report, with no inferred alias choice. */
+function prepare(snapshot: unknown, input: unknown) {
   const graph = validateGraph(snapshot), rows = jsonCopy(input);
   const expected = new Map<string, { ref: ItemRef; assertions: Set<string> }>(), observed = new Set<string>();
   check(Array.isArray(rows), 'Expected explicit endpoint observations');
@@ -28,12 +30,27 @@ export function inspectEndpoints(snapshot: unknown, input: unknown): ProjectionR
   }
   check(observed.size === expected.size, 'Every original endpoint requires an observation');
   const validated = rows as EndpointResolution[];
-  if (!validated.some(row => unresolved.has(row.status))) return inspectProjection(graph, validated);
+  if (!validated.some(row => unresolved.has(row.status))) return { graph, rows: validated, conflict: null };
   const diagnostics = validated.filter(row => row.status !== 'active').sort((a, b) => a.original.key < b.original.key ? -1 : 1)
     .map(row => ({ code: unresolved.has(row.status) ? 'endpoint-conflict' : 'endpoint',
       message: unresolved.has(row.status) ? `Native endpoint is ${row.status}; choose an explicit repair` : `Relationship endpoint is ${row.status}`,
       details: { ref: row.original, resolved: row.resolved, status: row.status,
         assertions: [...expected.get(row.original.key)!.assertions].sort() } }));
-  return { state: 'endpoint-conflict', relationships: null, clusters: null, transitions: null, diagnostics,
+  const conflict: ProjectionReport = { state: 'endpoint-conflict', relationships: null, clusters: null, transitions: null, diagnostics,
     originals: [...graph.assertions].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0) };
+  return { graph, rows: validated, conflict };
+}
+
+/** Inspect complete native evidence synchronously, preserving all unresolved originals. @param snapshot Strict graph. @param input Complete endpoint observations. @returns Complete ready/conflict or endpoint-conflict report. */
+export function inspectEndpoints(snapshot: unknown, input: unknown): ProjectionReport {
+  const value = prepare(snapshot, input);
+  return value.conflict === null ? inspectProjection(value.graph, value.rows) : value.conflict;
+}
+
+/** Inspect complete detached native evidence with explicit host scheduling and owner cancellation. @param snapshot Strict graph. @param input Complete endpoint observations. @param cooperation Required host/liveness/work-quantum controls. @returns Complete report equal to synchronous inspection, with no partial result on cancellation. */
+export async function inspectEndpointsAsync(snapshot: unknown, input: unknown, cooperation: EvaluationCooperation): Promise<ProjectionReport> {
+  validateCooperation(cooperation); cooperation.assertActive(); const value = prepare(snapshot, input);
+  await cooperation.yieldToHost(); cooperation.assertActive();
+  const report = value.conflict === null ? await inspectProjectionAsync(value.graph, value.rows, cooperation) : value.conflict;
+  cooperation.assertActive(); return report;
 }

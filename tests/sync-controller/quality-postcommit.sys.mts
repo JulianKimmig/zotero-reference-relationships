@@ -17,7 +17,7 @@ export async function qualityPostcommit(job: ControllerJob, api: NativeAPI) {
   const { createRepositoryFactory } = ChromeUtils.importESModule('resource://rr-reconciliation-production/src/adapters/repositories.mjs');
   const factory = createRepositoryFactory({ Zotero, DOMParser, crypto, TextEncoder, gateway: production.gateway });
   const app = new RelationshipApplication({ gateway: production.gateway, repositoryFor: factory.repositoryFor,
-    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), newID: () => crypto.randomUUID() });
+    repositoryForEvent: factory.repositoryForEvent, digest: factory.digest, now: () => new Date().toISOString(), newID: () => crypto.randomUUID(), yieldToHost: () => Zotero.Promise.delay(0) });
   const draft = await app.draftCreate({ source: ref(a), target: ref(b), type: 'referencing', metadata: { note: 'Saved before stop Café 你好' } });
   const beforeCount = await commits(api), stopped: { key: string; inTransaction: boolean }[] = [];
   const observer = Zotero.Notifier.registerObserver({
