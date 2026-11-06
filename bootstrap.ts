@@ -4,6 +4,66 @@ var relationshipRuntime: ReferenceRelationshipsHost.Runtime | undefined;
 var relationshipResource: string | undefined;
 
 /**
+ * Validate installation without initializing runtime services, seeding authority or migrating notes.
+ * @param addon Native descriptor supplied by Zotero for install, upgrade or downgrade.
+ * @returns Completes after checking the pinned native version, packaged identity and startup resources.
+ */
+async function install(addon: { id: string; version: string; rootURI: string }): Promise<void> {
+  if (!addon || typeof addon !== 'object' || addon.id !== 'reference-relationships@zotero-plugins.local') {
+    throw new TypeError('Invalid installed addon identity metadata');
+  }
+  const { id, version, rootURI } = addon;
+  if (typeof version !== 'string' || !version || /\s/.test(version)) {
+    throw new TypeError('Invalid installed addon version metadata');
+  }
+  validateInstallRoot(rootURI);
+  if (Zotero.version !== '10.0.7') throw new Error('Installation requires Zotero 10.0.7');
+  // This installed native File API reads file:/jar: channels without importing application modules.
+  const reader = Zotero.File as typeof Zotero.File & { getResourceAsync(uri: string): Promise<string> };
+  if (typeof reader?.getResourceAsync !== 'function') throw new Error('Missing native local-resource reader');
+  /** Read a required local packaged resource without executing it. @param path Addon-relative resource. @returns Nonempty UTF-8 content; native failures propagate. */
+  async function readResource(path: string): Promise<string> {
+    const contents = await reader.getResourceAsync(rootURI + path);
+    if (typeof contents !== 'string' || !contents.trim()) throw new Error(`Empty installation resource: ${path}`);
+    return contents;
+  }
+  const manifest: unknown = JSON.parse(await readResource('manifest.json'));
+  if (!installRecord(manifest) || !installRecord(manifest.applications)
+    || !installRecord(manifest.applications.zotero)) throw new Error('Invalid packaged addon manifest');
+  const compatibility = manifest.applications.zotero;
+  if (manifest.version !== version || compatibility.id !== id) {
+    throw new Error('Packaged addon manifest identity/version does not match installation metadata');
+  }
+  if (compatibility.strict_min_version !== Zotero.version || compatibility.strict_max_version !== Zotero.version) {
+    throw new Error('Packaged addon manifest compatibility must target Zotero 10.0.7 exactly');
+  }
+  for (const path of ['src/runtime/lifecycle.js', 'src/runtime/plugin.mjs', 'src/ui/preferences.xhtml',
+    'locale/en-US/reference-relationships.ftl']) await readResource(path);
+}
+
+/**
+ * Require a local unpacked directory or packed addon root as supplied by native getResourceURI().
+ * @param rootURI Addon root; remote URLs, queries, fragments and JAR subdirectories are rejected.
+ * @returns Completes for a valid local root; invalid metadata throws before native resource access.
+ */
+function validateInstallRoot(rootURI: string): void {
+  if (typeof rootURI !== 'string' || !rootURI.endsWith('/') || /[\s?#]/.test(rootURI)) {
+    throw new TypeError('Invalid installed addon rootURI metadata');
+  }
+  const packed = rootURI.startsWith('jar:');
+  if (packed && !rootURI.endsWith('!/')) throw new TypeError('Invalid packed addon rootURI');
+  let uri: URL;
+  try { uri = new URL(packed ? rootURI.slice(4, -2) : rootURI); }
+  catch (error) { throw new TypeError('Invalid installed addon rootURI', { cause: error }); }
+  if (uri.protocol !== 'file:' || uri.host) throw new TypeError('Addon rootURI must reference a local installation');
+}
+
+/** Narrow untrusted manifest JSON before reading nested metadata. @param value Parsed JSON value. @returns Whether value is a non-array object. */
+function installRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
  * Create the shared service and register existing main windows.
  * @param {{id: string, version: string, rootURI: string}} addon Installed descriptor.
  * @returns {Promise<void>} Completes native UI and preference registration.

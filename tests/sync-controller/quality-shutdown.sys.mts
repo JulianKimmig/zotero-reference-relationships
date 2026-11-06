@@ -129,6 +129,8 @@ export async function qualityShutdown(job: ControllerJob, api: NativeAPI) {
     check(!primary.closed && shutdownWindows(api, 'navigator:browser').length === 1
       && shutdownWindows(api, 'navigator:browser')[0] === primary && shutdownWindows(api, 'zotero:pref').length === 0,
     'Matched actions did not leave the original main window for controller-owned normal quit');
+    check(diagnostics.cumulative().pluginErrors.length === 0,
+      `Native plugin lifecycle reported errors: ${JSON.stringify(diagnostics.cumulative().pluginErrors)}`);
     return { action: job.action, variant: enabled ? 'plugin-enabled' : 'bare-host-never-installed',
       addon: { id: shutdownAddonID, version, isActive: enabled, installedVia: enabled ? 'resources(job, api)' : null },
       protocol, setup, receipts, initialDiagnostics: diagnostics.initial, actionDiagnostics: diagnostics.cumulative(),
