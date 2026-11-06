@@ -8,6 +8,8 @@ import type { ItemRef, Metadata } from '../domain/contracts.mts';
 import type { Draft, Review } from '../application/contracts.mts';
 import type { EditableEdge, RelationshipView } from './view.mts';
 import type { Disposable, FormControl } from './contracts.mts';
+import { formErrorOrigin, clearFormError, presentFormError } from './form-error.mts';
+import { errorMessage } from '../domain/failures.mts';
 
 /** Own one actual editor and all its listeners beneath an item-pane view. */
 export class RelationshipEditor {
@@ -30,11 +32,12 @@ export class RelationshipEditor {
     this.render();
   }
 
-  /** Run an explicit action while keeping its errors visible and reporting unexpected stale failures. @param {Function} action Async action. @returns {void} */
-  run(action: () => unknown): void {
-    Promise.resolve().then(action).catch(error => {
+  /** Run work while preserving visible diagnostics and optional explicit-action focus ownership. @param action Async work. @param focusError Opt in only for an explicit button action; background work never claims focus. @returns No pending work is hidden or retried. */
+  run(action: () => unknown, focusError: boolean = false): void {
+    const origin = focusError ? formErrorOrigin(this.root) : null;
+    Promise.resolve().then(action).catch((error: unknown) => {
       this.view.report(error);
-      if (!this.disposed) { this.error.textContent = error.message; this.invalidate(); }
+      if (!this.disposed) { this.invalidate(); presentFormError(this.root, this.error, errorMessage(error), origin); }
     });
   }
 
@@ -56,13 +59,13 @@ export class RelationshipEditor {
       const value = await this.view.app.describe(this.source);
       if (!this.disposed) this.sourceLabel.textContent = `${value.title} [${value.ref.key}]`;
     });
-    if (this.mode === 'edit') this.root.append(button(document, 'Choose source…', 'choose-source', () => this.run(() => this.pick('source')), signal));
+    if (this.mode === 'edit') this.root.append(button(document, 'Choose source…', 'choose-source', () => this.run(() => this.pick('source'), true), signal));
     const targetLabel = element(document, 'span', { 'data-rr-target-key': this.target ? this.target.key : '' }, 'Choose a target reference');
     this.targetLabel = targetLabel;
     if (this.target) this.run(async () => { const value = await this.view.app.describe(this.target); if (!this.disposed) targetLabel.textContent = value.title; });
     this.root.append(targetLabel);
     if (this.mode !== 'remove') {
-      this.root.append(button(document, 'Choose target…', 'choose-target', () => this.run(() => this.pick('target')), signal));
+      this.root.append(button(document, 'Choose target…', 'choose-target', () => this.run(() => this.pick('target'), true), signal));
       this.type = element(document, 'select', { 'aria-label': 'Relationship type', 'data-rr-type': '' });
       for (const type of context!.types.filter(type => !type.retired || type.id === this.edge?.type)) {
         this.type.append(element(document, 'option', { value: type.id }, type.label));
@@ -72,9 +75,9 @@ export class RelationshipEditor {
       this.fields = element(document, 'div'); this.root.append(this.fields);
       this.renderFields();
       this.type.addEventListener('change', () => { this.invalidate(); this.renderFields(); }, { signal });
-      this.root.append(button(document, 'Preview', 'preview', () => this.run(() => this.preview()), signal));
+      this.root.append(button(document, 'Preview', 'preview', () => this.run(() => this.preview(), true), signal));
     }
-    this.save = button(document, this.mode === 'remove' ? 'Confirm removal' : 'Save relationship', 'save', () => this.run(() => this.apply()), signal);
+    this.save = button(document, this.mode === 'remove' ? 'Confirm removal' : 'Save relationship', 'save', () => this.run(() => this.apply(), true), signal);
     this.save.disabled = true;
     this.root.append(this.details, this.error, this.save,
       button(document, 'Cancel', 'cancel', () => this.view.finishEditor(), signal));
@@ -109,7 +112,7 @@ export class RelationshipEditor {
 
   /** Recompute a detached command and a no-write review from current values. @returns {Promise<void>} */
   async preview() {
-    this.invalidate(); this.error.textContent = '';
+    this.invalidate(); clearFormError(this.error);
     const generation = this.reviewGeneration, pending = {};
     this.activePreview = pending; this.root.setAttribute('aria-busy', 'true');
     try {

@@ -9,7 +9,7 @@ test('accessible panel preserves every expected control name and exposes roles f
 });
 
 test('native accessible panels reject unnamed, missing, mislabeled and duplicate controls separately', () => {
-  for (const controls of [[], [{ key: 'note', name: '', role: 'entry' }], [{ key: 'note', name: 'Wrong label', role: 'entry' }],
+  for (const controls of [[], [{ key: 'note', name: null, role: 'entry' }], [{ key: 'note', name: '', role: 'entry' }], [{ key: 'note', name: 'Wrong label', role: 'entry' }],
     [{ key: 'note', name: 'Note (optional)', role: '' }], [{ key: 'note', name: 'Note (optional)', role: 'entry' },
       { key: 'note', name: 'Note (optional)', role: 'entry' }]]) {
     assert.throws(() => validateAccessiblePanel(controls, { note: 'Note (optional)' }), /accessible/i);

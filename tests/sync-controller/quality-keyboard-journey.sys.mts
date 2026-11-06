@@ -28,6 +28,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
   const window = Zotero.getMainWindow(), root = await selectPane(Zotero, window, a);
   const driver = new NativeKeyboardDriver(job, api), stages: object[] = [];
   const accessibility = new NativeAccessibilityAudit(api);
+  const clearedErrors: { label: string; nativeName: string | null; absentFromTree: boolean }[] = [];
   /** Persist exact current authority and projected rows after an intentional UI publication. @param label Completed workflow stage. @returns Current validated ready state. */
   async function checkpoint(label: string) {
     app.invalidateAll(); const state = readyState(await app.read('self'));
@@ -39,6 +40,16 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
   /** Wait until a real preview has enabled its corresponding confirmation. @param scope Current editor. @param action Confirmation action. @returns Enabled button. */
   async function reviewed(scope: HTMLElement, action: string) {
     return until(Zotero, () => scope.querySelector<HTMLButtonElement>(`[data-rr-action="${action}"]:not(:disabled)`), `${action} enabled`);
+  }
+  /** Require a successful review to remove the old visible and native accessible error name. @param label Workflow stage. @param scope Live editor. @returns Detached proof that validation state is cleared rather than remaining as a stale named alert. */
+  async function clearedError(label: string, scope: HTMLElement): Promise<void> {
+    const error = present(scope.querySelector<HTMLElement>('[role="alert"]'));
+    await until(Zotero, () => {
+      const node = accessibility.service.getAccessibleFor(error);
+      return error.textContent === '' && !error.hasAttribute('aria-label') && (!node || node.name === null || node.name === '');
+    }, `${label} cleared native validation name`);
+    const node = accessibility.service.getAccessibleFor(error);
+    clearedErrors.push({ label, nativeName: node ? node.name : null, absentFromTree: node === null });
   }
   try {
     await verifyNativeKeyboardPublication(io, exchange);
@@ -57,6 +68,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     await driver.action(window, editor, 'preview');
     await until(Zotero, () => editor.querySelector('[role="alert"]')?.textContent?.includes('Choose a target reference'), 'keyboard validation error');
     await accessibility.alert('Choose a target reference');
+    await accessibility.focused('validation error', present(editor.querySelector('[role="alert"]')));
     check((await app.read('self')).state === 'uninitialized' && await commits(api) === 0, 'Invalid keyboard preview wrote authority');
     await driver.action(window, editor, 'choose-target');
     const dialog = await opened(api, 'chrome://zotero/content/selectItemsDialog.xhtml');
@@ -74,6 +86,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     await driver.select(window, () => editor.querySelector<HTMLSelectElement>('[data-rr-type]'), 'referencing');
     await driver.text(window, () => editor.querySelector('[data-rr-field="note"]'), 'keyboard note');
     await driver.action(window, editor, 'preview'); await reviewed(editor, 'save');
+    await clearedError('relationship preview', editor);
     await driver.action(window, editor, 'save');
     await until(Zotero, () => !root.querySelector('[data-rr-editor]') && root.dataset.rrState === 'ready', 'keyboard relationship saved');
     const created = await checkpoint('created');
@@ -91,6 +104,11 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
       output: ['[data-rr-rule-field="outputType"]', 'Output relationship type'], transform: ['[data-rr-rule-field="transform"]', 'Output endpoints'],
     });
     await accessibility.focused('rule entry', present(form.querySelector('[data-rr-rule-field="id"]')));
+    await driver.action(preferences, form, 'preview-rule');
+    await until(Zotero, () => form.querySelector('[role="alert"]')?.textContent?.includes('Invalid stable identifier'), 'keyboard rule validation error');
+    await accessibility.alert('Invalid stable identifier');
+    await accessibility.focused('rule validation error', present(form.querySelector('[role="alert"]')));
+    check((await app.read('self')).state === 'ready' && await commits(api) === 1, 'Invalid rule preview published authority');
     await driver.text(preferences, () => form.querySelector('[data-rr-rule-field="id"]'), 'keyboard-inverse');
     for (const [field, value] of [['rootType', 'referencing'], ['inputType', 'referencing'], ['outputType', 'referenced-by'], ['transform', 'reverse']]) {
       await driver.select(preferences, () => form.querySelector<HTMLSelectElement>(`[data-rr-rule-field="${field}"]`), value);
@@ -98,6 +116,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     await driver.select(preferences, () => form.querySelector<HTMLSelectElement>('[data-rr-map-mode="note"]'), 'root');
     await driver.select(preferences, () => form.querySelector<HTMLSelectElement>('[data-rr-map-root="note"]'), 'note');
     await driver.action(preferences, form, 'preview-rule'); await reviewed(form, 'save-rule');
+    await clearedError('rule preview', form);
     await driver.action(preferences, form, 'save-rule');
     await until(Zotero, () => !rules.querySelector('[data-rr-rule-editor]') && rules.dataset.rrState === 'ready', 'keyboard rule saved');
     const inverse = await checkpoint('inverse rule configured');
@@ -133,7 +152,7 @@ export async function qualityKeyboardJourney(job: ControllerJob, api: NativeAPI)
     await accessibility.focused('after removal', present(root.querySelector('[data-rr-action="add"]')));
     accessibility.healthy();
     return { actualNativeKeyboard: true, unsignedIn: !Zotero.Users.getCurrentUserID(), initialFocusIsSetup: true,
-      validationErrorObserved: true, stages, steps: driver.steps, events: driver.events,
+      validationErrorObserved: true, stages, steps: driver.steps, events: driver.events, clearedErrors,
       accessibility: { panels: accessibility.panels, focus: accessibility.focus, events: accessibility.events,
         errors: accessibility.errors, consumers: accessibility.service.getConsumers() } };
   } catch (error) {

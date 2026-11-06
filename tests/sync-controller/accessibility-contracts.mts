@@ -1,7 +1,7 @@
 /** Narrow native accessibility interfaces verified against Gecko IDLs and checked at runtime before the audit. */
 /** Accessible objects expose native names, roles and state flags without invoking actions. */
 export interface NativeAccessible {
-  name: string; role: number;
+  name: string | null; role: number;
   getState(state: { value: number }, extra: { value: number }): void;
 }
 /** The real in-process accessibility service owns the accessible tree and native event names. */

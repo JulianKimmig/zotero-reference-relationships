@@ -9,7 +9,7 @@ import { check, until } from './ui-helpers.sys.mts';
 export class NativeAccessibilityAudit implements AccessibilityObserver {
   readonly panels: { label: string; controls: AccessibleControlEvidence[] }[] = [];
   readonly events: (AccessibleAlertEvidence & { fromUserInput: boolean })[] = [];
-  readonly focus: { label: string; name: string; nativeFocused: boolean }[] = [];
+  readonly focus: { label: string; name: string | null; nativeFocused: boolean }[] = [];
   readonly errors: string[] = [];
   readonly service: NativeAccessibilityService;
   #disposed = false;

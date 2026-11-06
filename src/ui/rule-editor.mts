@@ -9,6 +9,8 @@ import type { Graph, LibraryScope, Rule } from '../domain/contracts.mts';
 import type { Review, RuleCommand } from '../application/contracts.mts';
 import type { RulePreferences } from './rule-preferences.mts';
 import type { Disposable, FormControl } from './contracts.mts';
+import { formErrorOrigin, clearFormError, presentFormError } from './form-error.mts';
+import { errorMessage } from '../domain/failures.mts';
 
 /** Own one preference form's captured authority, review and listener lifetime. */
 export class RuleEditor {
@@ -25,7 +27,8 @@ export class RuleEditor {
     this.abort = new view.window.AbortController(); this.previewAbort = null;
     this.writable = true; this.lockedControls = new Map(); this.applyingControls = null;
     const { document, t } = view, owner = { document, t, signal: this.abort.signal };
-    this.root = element(document, 'section', { 'data-rr-rule-editor': '', 'aria-busy': 'false' });
+    this.root = element(document, 'section', { 'data-rr-rule-editor': '', 'aria-busy': 'false',
+      'aria-label': t(deleting ? 'delete' : rule ? 'edit' : 'new') });
     this.root.style.cssText = 'display:grid;gap:8px;border-block-start:1px solid currentColor;padding-block:12px';
     if (deleting) {
       this.root.append(element(document, 'p', {}, t('delete-help')));
@@ -34,16 +37,17 @@ export class RuleEditor {
       rule, t, onChange: () => this.invalidate() });
     this.error = element(document, 'p', { role: 'alert' });
     this.details = element(document, 'div', { 'data-rr-rule-review': '', 'aria-live': 'polite' });
-    this.save = ruleButton(owner, 'save', 'save-rule', () => this.run(() => this.apply())); this.save.disabled = true;
-    this.root.append(ruleButton(owner, 'preview', 'preview-rule', () => this.run(() => this.preview())), this.details,
+    this.save = ruleButton(owner, 'save', 'save-rule', () => this.run(() => this.apply(), true)); this.save.disabled = true;
+    this.root.append(ruleButton(owner, 'preview', 'preview-rule', () => this.run(() => this.preview(), true)), this.details,
       this.error, this.save, ruleButton(owner, 'cancel', 'cancel-rule', () => view.finishEditor()));
   }
 
-  /** Surface an actual action failure and discard any invalid review. @param {Function} action Async work. @returns {void} */
-  run(action: () => unknown): void {
-    Promise.resolve().then(action).catch(error => {
+  /** Surface actual failures with optional explicit-action focus ownership and discard invalid reviews. @param action Async work. @param focusError Only explicit Preview/Save actions opt in; background impact failures preserve focus. @returns Failures remain reported and visible. */
+  run(action: () => unknown, focusError: boolean = false): void {
+    const origin = focusError ? formErrorOrigin(this.root) : null;
+    Promise.resolve().then(action).catch((error: unknown) => {
       this.view.report(error);
-      if (!this.disposed) { this.invalidate(); this.error.textContent = error.message; }
+      if (!this.disposed) { this.invalidate(); presentFormError(this.root, this.error, errorMessage(error), origin); }
     });
   }
 
@@ -74,7 +78,7 @@ export class RuleEditor {
   /** Build and review the exact captured command; no writes occur during configuration. @returns {Promise<void>} */
   async preview() {
     check(this.writable, 'This library is not currently writable', 'permission');
-    this.invalidate(); this.error.textContent = '';
+    this.invalidate(); clearFormError(this.error);
     const generation = this.generation, pending = {}; this.pending = pending;
     this.previewAbort = new this.view.window.AbortController(); const signal = this.previewAbort.signal;
     this.root.setAttribute('aria-busy', 'true');
