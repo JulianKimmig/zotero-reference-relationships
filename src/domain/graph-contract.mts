@@ -9,6 +9,14 @@ function libraryScope(value: unknown): asserts value is LibraryScope {
   check(typeof value === 'string' && (value === 'self' || /^group:[1-9][0-9]{0,14}$/.test(value)), 'Invalid library scope');
 }
 
+/** Validate a reference value borrowed only from this module's owned jsonCopy capture. @param ref Detached normalized JSON whose domain fields remain unvalidated. @returns The same owned reference after exact shape, scope and key checks; no caller-owned value is accepted here directly. */
+function checkedReference(ref: unknown): ItemRef {
+  exact(ref, ['library', 'key']);
+  libraryScope(ref.library);
+  check(typeof ref.key === 'string' && /^[A-Z0-9]{8}$/.test(ref.key), 'Invalid item key');
+  return ref as ItemRef;
+}
+
 /**
  * Validate a key within its containing personal/group library. Personal scope
  * intentionally survives first-account sign-in; external transfers must map the
@@ -18,18 +26,19 @@ function libraryScope(value: unknown): asserts value is LibraryScope {
  * @returns {object} Detached normalized reference.
  */
 export function validateItemRef(input: unknown): ItemRef {
-  const ref = jsonCopy(input);
-  exact(ref, ['library', 'key']);
-  libraryScope(ref.library);
-  check(typeof ref.key === 'string' && /^[A-Z0-9]{8}$/.test(ref.key), 'Invalid item key');
-  return ref as ItemRef;
+  return checkedReference(jsonCopy(input));
+}
+
+/** Format an ordered tuple only after both references and type syntax have been validated. @param source Valid reference. @param type Valid stable type identifier. @param target Valid reference. @returns The unchanged collision-free key; graph-level scope/self-link constraints belong to graph admission. */
+function orderedKey(source: ItemRef, type: string, target: ItemRef): string {
+  return JSON.stringify([source.library, source.key, type, target.library, target.key]);
 }
 
 /** Stable collision-free identity for an ordered triple. @param {object} assertion Source/type/target. @returns {string} JSON tuple. */
 export function edgeKey(assertion: { source: unknown; target: unknown; type: unknown }): string {
   const source = validateItemRef(assertion.source), target = validateItemRef(assertion.target);
   identifier(assertion.type);
-  return JSON.stringify([source.library, source.key, assertion.type, target.library, target.key]);
+  return orderedKey(source, assertion.type, target);
 }
 
 /** Require a real Gregorian UTC timestamp with milliseconds. @param {*} value Timestamp. @returns {void} */
@@ -68,12 +77,12 @@ export function validateGraph(input: unknown): Graph {
     exact(assertion, ['id', 'source', 'target', 'type', 'metadata', 'createdAt', 'updatedAt']);
     identifier(assertion.id);
     check(!ids.has(assertion.id), 'Duplicate assertion identity'); ids.add(assertion.id);
-    const key = edgeKey(assertion);
+    const source = checkedReference(assertion.source), target = checkedReference(assertion.target);
+    identifier(assertion.type);
+    const key = orderedKey(source, assertion.type, target);
     check(!edges.has(key), 'Duplicate ordered relationship triple'); edges.add(key);
-    const source = validateItemRef(assertion.source), target = validateItemRef(assertion.target);
     check(source.library === graph.library && target.library === graph.library, 'Cross-library relationship');
     check(source.key !== target.key, 'Self-links are not allowed');
-    identifier(assertion.type);
     const type = types.get(assertion.type);
     check(!!type, 'Unknown relationship type');
     assertion.metadata = validateMetadata(type, assertion.metadata);
