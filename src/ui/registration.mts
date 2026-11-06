@@ -77,9 +77,10 @@ export function registerInterface({ Zotero, id, rootURI, application, gateway, r
   function addWindow(window: NativeWindow): void {
     window.MozXULElement.insertFTLIfNeeded('reference-relationships.ftl'); windows.add(window);
   }
-  /** Release a closing window without touching other addons' nodes. @param {Window} window Closing main window. @returns {void} */
+  /** Release owned views/menu DOM before localization, without touching other addons' nodes. @param {Window} window Closing main window or active window during disable. @returns {void} */
   function removeWindow(window: NativeWindow): void {
     for (const [body, view] of views) if (view.window === window) { view.dispose(); views.delete(body); }
+    for (const node of [...window.document.getElementsByClassName(registeredMenu)]) node.remove();
     window.document.querySelector('link[rel="localization"][href="reference-relationships.ftl"]')?.remove();
     windows.delete(window);
   }
