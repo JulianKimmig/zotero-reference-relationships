@@ -7,7 +7,7 @@ import type { ControllerJob } from './job-contracts.mts';
 import type { NativeAPI } from './native-api.mts';
 import { check, until, selectPane, click, type, createThroughUI } from './ui-helpers.sys.mts';
 import { install, book, ref, applyOne, change } from './rules-fixtures.sys.mts';
-import { paneID, preferences, openRule, fillRule, previewRule, saveRule, cancelRule, toggleRule, storedRule, sameAuthority } from './rule-preferences-helpers.sys.mts';
+import { paneID, preferences, openRule, fillRule, previewRule, saveRule, cancelRule, toggleRule, storedRule, sameAuthority, requiredRuleEvidence, verifyRestartRules, inspectRuleRestart } from './rule-preferences-helpers.sys.mts';
 import { rulePreferenceEdges } from './rule-preferences-edges.sys.mts';
 import { typedRulePreferences } from './rule-preferences-typed.sys.mts';
 
@@ -47,6 +47,8 @@ async function bulkReview(api: NativeAPI, review: HTMLElement) {
 
 /** Run native user journeys on installed production code; no application internals are mocked. @param {object} job Explicit phase. @param {object} api Native resources. @returns {Promise<object>} Evidence. */
 export async function rulePreferences(job: ControllerJob, api: NativeAPI) {
+  if (job.action === 'ruleui:inspect-restart') return inspectRuleRestart(job, api);
+  requiredRuleEvidence(job.xpi, 'job.xpi');
   const { Zotero } = api, main = await install(job, api), app = Zotero.ReferenceRelationships!.application;
   if (job.action === 'ruleui:readonly') {
     await api.synchronize();
@@ -84,9 +86,9 @@ export async function rulePreferences(job: ControllerJob, api: NativeAPI) {
     return { a: a.key, b: b.key, c: c.key, snapshot: readyState((await app.read('self'))).snapshot,
       actualOfficialPreferences: true, bulkPagination: true, previewCancel: true, exactCustomInverse: true, generatedExplanation: true };
   }
-  const a = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, present(job.a));
-  const b = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, present(job.b));
-  const c = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, present(job.c));
+  const a = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, requiredRuleEvidence(job.a, 'restart.job.a'));
+  const b = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, requiredRuleEvidence(job.b, 'restart.job.b'));
+  const c = await Zotero.Items.getByLibraryAndKeyAsync(Zotero.Libraries.userLibraryID, requiredRuleEvidence(job.c, 'restart.job.c'));
   check(JSON.stringify(readyState((await app.read('self'))).snapshot) === JSON.stringify(job.snapshot), 'Rule UI restart changed saved authority');
   const { window, root } = await preferences(api);
   if (job.action === 'ruleui:edit') {
@@ -134,19 +136,19 @@ export async function rulePreferences(job: ControllerJob, api: NativeAPI) {
   }
   check(job.action === 'ruleui:restart', 'Unknown rule preference phase');
   let editor = await openRule(api, root, 'inverse-ui');
-  check(present(editor.querySelector<HTMLSelectElement>('[data-rr-rule-field="outputType"]')).value === 'referenced-by'
-    && present(editor.querySelector<HTMLSelectElement>('[data-rr-map-mode="note"]')).value === 'root'
-    && present(editor.querySelector<HTMLSelectElement>('[data-rr-map-root="note"]')).value === 'note', 'Restart lost UI definition or mapping');
+  check(requiredRuleEvidence(editor.querySelector<HTMLSelectElement>('[data-rr-rule-field="outputType"]'), 'restart.output-type').value === 'referenced-by'
+    && requiredRuleEvidence(editor.querySelector<HTMLSelectElement>('[data-rr-map-mode="note"]'), 'restart.note-map-mode').value === 'root'
+    && requiredRuleEvidence(editor.querySelector<HTMLSelectElement>('[data-rr-map-root="note"]'), 'restart.note-map-root').value === 'note', 'Restart lost UI definition or mapping');
   await cancelRule(api, root);
-  check(!present((await storedRule(app, 'conditional-ui'))).enabled && !(await storedRule(app, 'symmetric-ui')), 'Restart lost disable/delete state');
+  await verifyRestartRules(app);
   const { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
   const addon = await AddonManager.getAddonByID('reference-relationships@zotero-plugins.local');
   const snapshot = JSON.stringify(readyState((await app.read('self'))).snapshot);
-  await present(addon).disable();
+  await requiredRuleEvidence(addon, 'restart.addon-before-disable').disable();
   await until(Zotero, () => !Object.hasOwn(Zotero, 'ReferenceRelationships') && !Zotero.PreferencePanes.pluginPanes.some(pane => pane.id === paneID), 'preference pane teardown');
   check(root.dataset.rrState === 'disposed', 'Removed preference controls still advertise ready authority');
   check(!root.querySelector<HTMLElement>('[data-rr-rule-editor]') && !root.querySelector<HTMLButtonElement>('[data-rr-action="new-rule"]'), 'Disabled runtime retained owned preference controls');
-  await present(addon).enable();
+  await requiredRuleEvidence(addon, 'restart.addon-before-enable').enable();
   let reloaded;
   try { reloaded = await preferences(api); }
   catch (caught) { const error = caught instanceof Error ? caught : new Error(String(caught)); error.message += '; stage=after-native-enable'; throw error; }

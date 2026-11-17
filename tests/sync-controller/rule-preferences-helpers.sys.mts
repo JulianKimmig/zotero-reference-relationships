@@ -4,10 +4,16 @@ import { present, readyState } from './evidence.sys.mts';
 import type { TestWindow } from './platform-contracts.mts';
 import type { RelationshipApplication } from '../../src/application/service.mts';
 import type { NativeAPI } from './native-api.mts';
+import type { ControllerJob } from './job-contracts.mts';
 import { check, until, click, type } from './ui-helpers.sys.mts';
 import { checked } from './catalog-helpers.sys.mts';
 
 export const paneID = 'reference-relationships-rules';
+
+/** Require evidence with a static fixture/control label instead of an unlocatable generic absence. @param value Actual observation. @param label Non-secret fixture or control label. @returns Present observation. */
+export function requiredRuleEvidence<T>(value: T, label: string): NonNullable<T> {
+  check(value !== null && value !== undefined, `Missing rule preference evidence: ${label}`); return value;
+}
 
 /** Open Zotero's official preferences after registration and fragment mounting. @param {object} api Actual platform. @param {string} library Portable scope. @returns {Promise<object>} Real window/root and registration count observed before waiting. */
 export async function preferences(api: NativeAPI, library: string = 'self') {
@@ -22,7 +28,7 @@ export async function preferences(api: NativeAPI, library: string = 'self') {
     return root?.isConnected && root.dataset.rrState === 'ready' && root.querySelector<HTMLSelectElement>('[data-rr-library]') ? root : null;
   }, 'current official preferences fragment and library data');
   const selector = root.querySelector<HTMLSelectElement>('[data-rr-library]');
-  if (present(selector).value !== library) {
+  if (requiredRuleEvidence(selector, 'preferences.library-selector').value !== library) {
     type(window, selector, library);
     await until(Zotero, () => root.dataset.rrState === 'ready' && root.dataset.rrLibrary === library, 'selected preference library');
   }
@@ -78,7 +84,43 @@ export async function toggleRule(api: NativeAPI, root: HTMLElement, id: string, 
 }
 
 /** Return the named rule from actual public authority. @param {object} app Application. @param {string} id Identity. @returns {Promise<object>} Stored rule. */
-export async function storedRule(app: RelationshipApplication, id: string) { return present(readyState((await app.read('self'))).snapshot.rules.find(rule => rule.id === id)); }
+export async function storedRule(app: RelationshipApplication, id: string) {
+  return requiredRuleEvidence(readyState((await app.read('self'))).snapshot.rules.find(rule => rule.id === id), `stored-rule.${id}`);
+}
+
+/** Verify disabled and deleted declarations directly against one public authority read; absence is required for the deleted rule. @param app Actual application. @returns Completion or the labeled missing/preservation failure. */
+export async function verifyRestartRules(app: RelationshipApplication): Promise<void> {
+  const rules = readyState(await app.read('self')).snapshot.rules;
+  const conditional = requiredRuleEvidence(rules.find(rule => rule.id === 'conditional-ui'), 'restart.conditional-ui');
+  check(!conditional.enabled && !rules.some(rule => rule.id === 'symmetric-ui'), 'Restart lost disable/delete state');
+}
+
+/** Inspect already-installed runtime, public authority and real preference controls without installing, saving or toggling the addon. Unavailable runtime/pane evidence is reported explicitly. @param job Prior anonymous fixture receipt, optionally with expected snapshot. @param api Actual native resources. @returns Read-only diagnostic receipt with actual authority, addon status and control-presence flags. */
+export async function inspectRuleRestart(job: ControllerJob, api: NativeAPI) {
+  const { Zotero } = api, { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
+  const addon = await AddonManager.getAddonByID('reference-relationships@zotero-plugins.local');
+  const runtime = Zotero.ReferenceRelationships, app = runtime?.application;
+  const authority = app ? await app.read('self') : null;
+  const registrationCount = Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length;
+  const report = { readOnlyInspection: true, addon: { present: addon !== null, active: addon === null ? null : addon.isActive },
+    runtime: { present: runtime !== undefined, state: runtime === undefined ? null : runtime.state }, registrationCount, authority,
+    expectedSnapshotProvided: job.snapshot !== undefined,
+    expectedSnapshotMatches: job.snapshot === undefined || authority?.state !== 'ready' ? null : JSON.stringify(authority.snapshot) === JSON.stringify(job.snapshot) };
+  if (!app || registrationCount !== 1) return { ...report, controls: null, controlsObserved: false };
+  const { window, root } = await preferences(api);
+  try {
+    const rows = [...root.querySelectorAll<HTMLElement>('[data-rr-rule-id]')];
+    const inverseRow = rows.some(row => row.dataset.rrRuleId === 'inverse-ui');
+    const editor = inverseRow ? await openRule(api, root, 'inverse-ui') : null;
+    const controls = { librarySelector: !!root.querySelector('[data-rr-library]'), newRule: !!root.querySelector('[data-rr-action="new-rule"]'),
+      inverseRow, conditionalRow: rows.some(row => row.dataset.rrRuleId === 'conditional-ui'),
+      symmetricRow: rows.some(row => row.dataset.rrRuleId === 'symmetric-ui'), editor: editor !== null,
+      outputType: !!editor?.querySelector('[data-rr-rule-field="outputType"]'), noteMapMode: !!editor?.querySelector('[data-rr-map-mode="note"]'),
+      noteMapRoot: !!editor?.querySelector('[data-rr-map-root="note"]') };
+    await sameAuthority(app, requiredRuleEvidence(authority, 'inspect.authority'));
+    return { ...report, controls, controlsObserved: true, authorityUnchanged: true };
+  } finally { window.close(); }
+}
 
 /** Require exact native head/snapshot to remain unchanged. @param {object} app Public application. @param {object} before Captured state. @returns {Promise<void>} */
 export async function sameAuthority(app: RelationshipApplication, before: RepositoryState) {

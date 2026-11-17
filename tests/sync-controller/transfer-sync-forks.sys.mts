@@ -7,6 +7,7 @@ import type { GenerationFixture, NativeReady, TransferSyncContext } from './tran
 import { fixtureJSON, requireReady, captureUnrelated, requireUnrelated, fixtureID } from './transfer-sync-fixtures.sys.mts';
 import { present, readyState } from './evidence.sys.mts';
 import { check } from './ui-helpers.sys.mts';
+import { rejects } from './ui-permissions.sys.mts';
 
 /** Complete branch snapshots travel between controlled client jobs; no token or native object is serialized. */
 export type ForkJob = ControllerJob & { forkRule?: NativeReady; forkAssertion?: NativeReady; resolved?: NativeReady };
@@ -104,24 +105,29 @@ export async function transferSyncForks(job: ForkJob, api: NativeAPI, context: T
           check(fixtureJSON(api, snapshot[kind].find(entity => entity.id === previous.id)) === fixtureJSON(api, previous), 'Resolution changed an unrelated original entity');
         }
       }
-      const { LifecycleProjection } = api.ChromeUtils.importESModule('resource://rr-reconciliation-production/src/application/lifecycle.mjs');
-      const { reviewTransfer } = api.ChromeUtils.importESModule('resource://rr-reconciliation-production/src/transfer/review.mjs');
-      const lifecycle = new LifecycleProjection(context.gateway, context.factory.digest, { batchSize: 256, yieldToHost: () => api.Zotero.Promise.delay(0), assertActive: () => check(!!api.Zotero.ReferenceRelationships, 'Native plugin lifetime ended') }), choices = await mapping(context, snapshot);
-      const observed = await lifecycle.observe([rule.snapshot, assertion.snapshot, snapshot]);
-      const review = reviewTransfer(rule.snapshot, snapshot, choices, observed.rows);
-      const otherReview = reviewTransfer(assertion.snapshot, snapshot, choices, observed.rows);
-      check(review.projection.after.state === 'ready' && otherReview.projection.after.state === 'ready', 'Explicit two-head cleanup has no complete reviewed result');
-      const owner = context.identity.capture(context.scope);
-      const writer = context.factory.repositoryForEvent(context.scope, async () => {
-        owner.assertCurrent(); await context.gateway.assertWritable(context.scope, review.refs);
-        await lifecycle.assertBinding(rule.snapshot, snapshot, observed.endpointRevision); owner.assertCurrent();
-      });
-      const revision = await writer.resolve(snapshot, [rule.head, assertion.head].sort());
+      const heads = [rule.head, assertion.head].sort();
+      await rejects(() => context.app.previewResolution(snapshot, [heads[0], 'ZZZZZZZZ']), 'conflict');
+      await conflict(api, context, job);
+      const altered = await context.app.previewResolution(snapshot, heads);
+      altered.snapshot.assertions.find(root => root.id === rootID)!.metadata.note = 'Changed after review';
+      await rejects(() => context.app.applyReviewed(altered), 'conflict');
+      await conflict(api, context, job);
+      const review = await context.app.previewResolution(snapshot, heads);
+      check(fixtureJSON(api, review.expectedHeads) === fixtureJSON(api, heads)
+        && fixtureJSON(api, review.branches.map(branch => branch.head)) === fixtureJSON(api, heads), 'Application did not review every competing branch');
+      check(review.branches.every(branch => branch.projection.after.state === 'ready'), 'Application resolution has an incomplete projected result');
+      const fromRule = present(review.branches.find(branch => branch.head === rule.head));
+      const fromAssertion = present(review.branches.find(branch => branch.head === assertion.head));
+      check(fromRule.changeSet.assertions.updated.some(change => change.after.id === rootID)
+        && fromAssertion.changeSet.rules.updated.some(change => change.after.id === fixture.baseline.rule), 'Per-branch application review hid a concurrent change');
+      const committed = await context.app.applyReviewed(review), revision = committed.revision;
+      check('branches' in committed && committed.branches.length === 2, 'Application resolution did not return both reviewed branch changes');
       context.app.invalidate(context.scope); await context.requireSync();
       const state = readyState(await context.repository.read());
       check(state.head === revision && fixtureJSON(api, state.snapshot) === fixtureJSON(api, snapshot), 'Explicit cleanup did not preserve both reviewed changes');
       await requireUnrelated(api, context, unrelated);
-      return { state, explicitlyReviewedBothHeads: true, ruleVersionPreserved: 10, assertionMetadataPreserved: true,
+      return { state, applicationResolution: true, rejectedUnobservedHeads: true, rejectedChangedReview: true,
+        explicitlyReviewedBothHeads: true, ruleVersionPreserved: 10, assertionMetadataPreserved: true,
         unrelatedAuthorityPreserved: true, completeGenerationPublished: true };
     }
     check(job.action === 'transfer:sync-fork-ready', 'Unknown controlled fork phase');
