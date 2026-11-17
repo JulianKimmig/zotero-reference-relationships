@@ -33,7 +33,7 @@ export function validateConfig(config: unknown): asserts config is SyncConfig {
 }
 
 /** Check live command lines rather than stale lock files. @param {string} profile Exact dedicated profile. @returns {Promise<void>} */
-async function requireClosed(profile: string) {
+export async function requireClosed(profile: string) {
   for (const entry of await readdir('/proc')) {
     if (!/^\d+$/.test(entry)) continue;
     let args;

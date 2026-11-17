@@ -88,6 +88,12 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (['account:login', 'account:browser-login', 'account:verify', 'account:status'].includes(syncJob.action)) {
+    const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-account-tests', Services.io.newURI(controllerRootURI));
+    const { accountLogin } = ChromeUtils.importESModule('resource://rr-account-tests/account-login.sys.mjs');
+    return accountLogin(syncJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+  }
   if (syncJob.action.startsWith('quality:')) {
     const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
     handler.setSubstitution('rr-quality-tests', Services.io.newURI(controllerRootURI));

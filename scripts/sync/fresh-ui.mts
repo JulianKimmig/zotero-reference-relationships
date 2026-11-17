@@ -29,7 +29,7 @@ export async function freshUIClient({ executable, xpi, id, version, updateURL, c
   await writeFile(userFile, Buffer.concat([original, Buffer.from(preference)]));
   const log = createWriteStream(join(session.root, 'warmup.log'), { mode: 0o600 });
   const child = spawn('xvfb-run', ['-a', executable, '-no-remote', '-profile', session.profile, '-datadir', session.data],
-    { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, MOZ_NO_REMOTE: '1', MOZ_CRASHREPORTER_DISABLE: '1' } });
+    { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TMPDIR: '/tmp', MOZ_NO_REMOTE: '1', MOZ_CRASHREPORTER_DISABLE: '1' } });
   child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });
   try {
     await awaitExit(child);
