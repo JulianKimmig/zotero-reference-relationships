@@ -3,6 +3,7 @@ import type { AddonManagerModule, NativeAddon, TestItem } from './platform-contr
 
 /** Only actual native imports used by the production and test loaders are declared. */
 export interface NativeModuleLoader {
+  importESModule(uri: `resource://${string}/release.sys.mjs`): typeof import('./release.sys.mts');
   importESModule(uri: `resource://${string}/src/application/changes.mjs`): typeof import('../../src/application/changes.mts');
   importESModule(uri: `resource://${string}/src/application/projection-views.mjs`): typeof import('../../src/application/projection-views.mts');
   importESModule(uri: `resource://${string}/quality.sys.mjs`): typeof import('./quality.sys.mts');

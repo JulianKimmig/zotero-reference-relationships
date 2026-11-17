@@ -4,6 +4,11 @@ Create directed, typed relationships between regular Zotero references in the
 same personal or group library. The initial types are **Referencing**,
 **Referenced by** and **Similar**, each with optional plain-text Note metadata.
 
+Install the provided XPI through Zotero's **Tools → Plugins** window: open the
+gear menu and choose **Install Add-on From File…**. Keep a JSON backup before
+upgrading. Disable or uninstall the plugin from the same window; reinstalling
+restores access to retained relationship data after the library finishes syncing.
+
 Select a reference and open its **Relationships** item-pane section, or use
 **Add relationship…** in its context menu. Choose a target through Zotero's native
 picker, select a type, enter metadata and click **Preview**, then **Save relationship**.
@@ -87,6 +92,12 @@ JSON backup format.
 
 The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
 
-Version `0.1.0` targets **Zotero 10.0.7 on Linux x86_64** only. The
-[manifest](manifest.json) restricts the application version to `10.0.7`; this
-development target does not establish full product compatibility.
+Version `0.1.0` supports **Zotero 10.0.7 on Linux x86_64**. The
+[manifest](manifest.json) restricts the application version to `10.0.7`.
+Other Zotero versions and operating systems are outside the supported scope.
+
+Each library supports up to 1,000 explicit relationships, 64 relationship types
+and 64 rules, with up to 16 metadata fields per type. Preview rejects invalid
+or excessive work before publication; no partial result is saved. Persistent
+sync conflicts require an explicit complete recovery review. Keep all competing
+data notes until recovery is finished; importing over a conflict is blocked.

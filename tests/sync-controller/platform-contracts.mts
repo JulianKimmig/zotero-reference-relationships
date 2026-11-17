@@ -43,7 +43,7 @@ export interface TestWindow extends NativeWindow {
 }
 /** Actual Gecko addon instance, including asynchronous lifecycle changes. */
 export interface NativeAddon {
-  id: string; isActive: boolean; updateURL: string;
+  id: string; version: string; isActive: boolean; updateURL: string;
   enable(): Promise<void>; disable(): Promise<void>; uninstall(): Promise<void>;
 }
 /** Real native addon manager module capabilities. */
