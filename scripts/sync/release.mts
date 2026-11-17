@@ -94,14 +94,14 @@ async function main(): Promise<void> {
   evidenceRoots.roundtrip = join(root, 'roundtrip'); await mkdir(evidenceRoots.roundtrip);
   await progress('release:roundtrip');
   const roundtrip = await nativeJob<ReleaseRoundtripReport>({ ...options, root: evidenceRoots.roundtrip }, 'release', { ...common, action: 'release:roundtrip' });
-  proved(roundtrip, ['nativeUpgrade', 'nativeDisable', 'nativeReenable', 'nativeUninstall', 'nativeReinstall', 'exactAuthority', 'nativeDataPreserved']);
+  proved(roundtrip, ['permanentInstall', 'nativeUpgrade', 'nativeDisable', 'nativeReenable', 'nativeUninstall', 'nativeReinstall', 'exactAuthority', 'nativeDataPreserved']);
   assert.equal(roundtrip.previousVersion, '0.0.9'); assert.equal(roundtrip.releaseFixture?.readyState?.state, 'ready');
   completed.push('release:roundtrip');
   evidenceRoots.restart = join(root, 'restart'); await mkdir(evidenceRoots.restart);
   await progress('release:restart');
   const restart = await nativeJob<ReleaseRestartReport>({ ...options, root: evidenceRoots.restart }, 'release',
     { ...common, action: 'release:restart', releaseFixture: roundtrip.releaseFixture });
-  proved(restart, ['nativeRestart', 'exactAuthority', 'nativeDataPreserved']);
+  proved(restart, ['permanentInstall', 'automaticStartup', 'nativeRestart', 'exactAuthority', 'nativeDataPreserved']);
   completed.push('release:restart'); await progress('complete');
   await writeFile(join(root, 'result.json'), JSON.stringify({ ok: true, artifacts, priorFixture, completed, evidenceRoots,
     client: config.clients.release, currentSHA256: current.sha256, previousSHA256: previous.sha256,

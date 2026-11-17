@@ -29,11 +29,12 @@ export interface ReleaseJob extends ControllerJob { previousXPI?: string; releas
 export interface ReleaseRoundtripReport {
   releaseFixture: ReleaseFixture; previousVersion: '0.0.9'; currentVersion: '0.1.0';
   nativeUpgrade: true; nativeDisable: true; nativeReenable: true; nativeUninstall: true; nativeReinstall: true;
-  exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
+  permanentInstall: true; exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
 }
 /** Proof emitted only by an independent process reading the retained fixture. */
 export interface ReleaseRestartReport {
-  nativeRestart: true; currentVersion: '0.1.0'; exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
+  nativeRestart: true; permanentInstall: true; automaticStartup: true; currentVersion: '0.1.0';
+  exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
 }
 
 /** Count actual official preference registrations belonging to this addon. @param api Real native platform. @returns Number of matching registered panes. */
@@ -41,11 +42,18 @@ function registrations(api: NativeAPI): number {
   return api.Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length;
 }
 
-/** Install the explicit frozen artifact and wait for its actual current runtime. @param api Native addon manager/platform. @param xpi Explicit immutable artifact. @param version Expected fixture or candidate version. @returns Actual addon and distinct running application generation. */
+/** Persist the explicit frozen artifact using the installed 10.0.7 local-file API and await native completion/startup. @param api Native addon manager/platform. @param xpi Explicit immutable artifact. @param version Expected fixture or candidate version. @returns Actual persistent addon and distinct running application generation. */
 async function install(api: NativeAPI, xpi: string, version: string) {
   const { Zotero } = api, { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
-  const addon = await AddonManager.installTemporaryAddon(Zotero.File.pathToFile(xpi));
-  check(addon.id === addonID && addon.version === version && addon.isActive, 'Release addon identity/version/activation differs');
+  const installer = present(await AddonManager.getInstallForFile(Zotero.File.pathToFile(xpi)));
+  /** Bound actual native installation without delaying successful completion or simulating install events. @returns Rejection only when native completion misses the deadline. */
+  async function deadline(): Promise<never> {
+    await Zotero.Promise.delay(20000);
+    throw new Error('Persistent release installation exceeded its native completion deadline');
+  }
+  const addon = await Promise.race([installer.install(), deadline()]);
+  check(addon.id === addonID && addon.version === version && addon.isActive && addon.temporarilyInstalled === false,
+    'Release addon must have the expected identity/version and active persistent installation');
   const runtime = await until(Zotero, () => {
     const current = Zotero.ReferenceRelationships;
     return current?.state === 'running' && current.version === version && registrations(api) === 1 ? current : null;
@@ -173,17 +181,25 @@ async function roundtrip(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundt
     await retained(api, fixture);
     return { releaseFixture: fixture, previousVersion: '0.0.9', currentVersion: '0.1.0', nativeUpgrade: true,
       nativeDisable: true, nativeReenable: true, nativeUninstall: true, nativeReinstall: true,
-      exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
+      permanentInstall: true, exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
   } catch { throw new Error(`Release roundtrip failed at ${phase.step}`); }
 }
 
-/** Run release-only behavioral checks on an anonymous initialized native client. @param job Explicit release action, frozen XPIs and optional prior-process fixture. @param api Real native resources; synchronization is never requested. @returns Actual roundtrip or independent restart proof. */
+/** Run release-only behavioral checks on an anonymous initialized native client. Restart inspects automatic startup without an install call. @param job Explicit release action, frozen XPIs and optional prior-process fixture. @param api Real native resources; synchronization is never requested. @returns Actual persistent roundtrip or automatic restart proof. */
 export async function release(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundtripReport | ReleaseRestartReport> {
   check(!api.Zotero.Users.getCurrentUserID(), 'Release acceptance requires an anonymous dedicated client');
   if (job.action === 'release:roundtrip') return roundtrip(job, api);
   check(job.action === 'release:restart', 'Unknown native release action');
   const fixture = present(job.releaseFixture);
-  await install(api, present(job.xpi), '0.1.0');
+  const { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
+  const addon = present(await AddonManager.getAddonByID(addonID));
+  check(addon.id === addonID && addon.version === '0.1.0' && addon.isActive && addon.temporarilyInstalled === false,
+    'Restart requires the already active persistent release addon');
+  await until(api.Zotero, () => {
+    const runtime = api.Zotero.ReferenceRelationships;
+    return runtime?.state === 'running' && runtime.version === '0.1.0' && registrations(api) === 1;
+  }, 'release automatic startup and single preference registration');
   await retained(api, fixture);
-  return { nativeRestart: true, currentVersion: '0.1.0', exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
+  return { nativeRestart: true, permanentInstall: true, automaticStartup: true, currentVersion: '0.1.0',
+    exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
 }

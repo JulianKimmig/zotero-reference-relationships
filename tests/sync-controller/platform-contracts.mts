@@ -43,12 +43,16 @@ export interface TestWindow extends NativeWindow {
 }
 /** Actual Gecko addon instance, including asynchronous lifecycle changes. */
 export interface NativeAddon {
-  id: string; version: string; isActive: boolean; updateURL: string;
+  id: string; version: string; isActive: boolean; updateURL: string; temporarilyInstalled: boolean;
   enable(): Promise<void>; disable(): Promise<void>; uninstall(): Promise<void>;
 }
 /** Real native addon manager module capabilities. */
 export interface AddonManagerModule {
-  AddonManager: { installTemporaryAddon(file: object): Promise<NativeAddon>; getAddonByID(id: string): Promise<NativeAddon | null> };
+  AddonManager: {
+    installTemporaryAddon(file: object): Promise<NativeAddon>; getAddonByID(id: string): Promise<NativeAddon | null>;
+    /** Resolve the persistent local-file installer; its completion promise includes native addon startup. @param file Actual nsIFile. @returns Real installer or null when no provider accepts the file. */
+    getInstallForFile(file: object): Promise<{ install(): Promise<NativeAddon> } | null>;
+  };
 }
 /** Real non-secret native client state required by the dedicated test controller. */
 export interface TestPlatform extends ZoteroPlatform {
