@@ -36,6 +36,15 @@ manual, generated and combined support; editing or removing a manual contributio
 preserves independent rule support. Generated-only rows follow their roots and
 rules and cannot be edited directly.
 
+When the Relationships section offers **Review original relationships…**, use
+it to inspect retained original keys, metadata and contributions after merges or
+endpoint changes. Choose **Edit this original…**, **Remove this original…** or
+select originals for a reviewed removal. Preview the complete effects before
+saving; other contributions remain stored. Close and reopen the list if Zotero
+reports that data changed. These controls repair original contributions. Storage
+forks from concurrent synchronization require a developer recovery review;
+there is currently no user interface for choosing between those stored versions.
+
 Use **Manage rules…** in the Relationships section, or open **Reference
 Relationships** in Zotero's preferences. Select the library, then create a rule
 with a stable ID, root type, matching type and output type. Conditions inspect
