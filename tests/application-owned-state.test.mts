@@ -16,6 +16,8 @@ function fixture(graph?: Graph) {
   const repository: RepositoryPort = {
     async read() { reads++; return { state: 'ready', head: 'ABCDEFGH', snapshot: stored }; },
     async compareAndCommit() { throw new Error('Read/draft tests must not publish'); },
+    async readHead() { throw new Error('Read/draft tests must not read recovery branches'); },
+    async resolve() { throw new Error('Read/draft tests must not resolve conflicts'); },
     invalidate() { reads = 0; },
   };
   const gateway: ApplicationGateway = {

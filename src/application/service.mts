@@ -8,11 +8,12 @@ import { proposeRuleChange } from './rule-commands.mts';
 import { LifecycleProjection } from './lifecycle.mts';
 import { indexProjection, projectedPage, inspectionPage } from './projection-views.mts';
 import { IssuedReviews } from './receipts.mts';
+import { ResolutionCommands } from './resolution.mts';
 import { proposeRemoval } from './assertion-commands.mts';
 import type { Graph } from '../domain/contracts.mts';
 import type { Page } from '../domain/pagination.mts';
 import type { RepositoryState } from '../storage/contracts.mts';
-import type { Applied, ApplicationGateway, ApplicationOptions, AssertionInput, Draft, RepositoryFactory, RepositoryPort, Review, RuleCommand, SelectionContext, TypeCommand } from './contracts.mts';
+import type { Applied, ApplicationGateway, ApplicationOptions, AssertionInput, Draft, RepositoryFactory, RepositoryPort, ResolutionApplied, ResolutionReview, Review, RuleCommand, SelectionContext, TypeCommand } from './contracts.mts';
 
 /** Admit and detach backend state once without imposing the graph byte limit on its enclosing state. @param state External authoritative read state. @returns Privately owned normalized ordinary JSON after strict graph/JSON validation. */
 function admitState(state: RepositoryState): RepositoryState {
@@ -27,6 +28,7 @@ export class RelationshipApplication {
   #repositories = new Map<string, RepositoryPort>(); #states = new Map<string, { promise: Promise<RepositoryState> }>(); #stopped = false;
   #views = new WeakMap<object, Promise<ReturnType<typeof indexProjection>>>();
   #lifecycle: LifecycleProjection | null; #reviews = new IssuedReviews();
+  #resolution: ResolutionCommands;
 
   /**
    * Bind required production dependencies without accessing native globals.
@@ -39,6 +41,8 @@ export class RelationshipApplication {
     check([repositoryFor, repositoryForEvent, now, newID].every(value => typeof value === 'function'), 'Explicit repository boundaries, clock and ID functions required');
     this.#gateway = gateway; this.#repositoryFor = repositoryFor; this.#repositoryForEvent = repositoryForEvent; this.#now = now; this.#newID = newID;
     this.#lifecycle = new LifecycleProjection(gateway, digest, { yieldToHost, assertActive: () => this.#active(), batchSize: 256 });
+    this.#resolution = new ResolutionCommands({ gateway, lifecycle: this.#lifecycle, repositoryFor, repositoryForEvent,
+      assertActive: () => this.#active(), invalidate: scope => this.invalidate(scope) });
   }
 
   /** Reject operations after teardown. @returns {void} Throws a visible failure. */
@@ -246,10 +250,18 @@ export class RelationshipApplication {
   async applyFromEvent(command: Draft['command'], expectedRevision: string|null) { this.#active(); return this.#apply(command, expectedRevision, this.#repositoryForEvent!, null); }
 
   /** Publish exactly an actual current-generation user review, rejecting native changes even when the manifest is unchanged. @param {object} receipt Issued complete preview result. @returns {Promise<object>} Committed revision and reviewed ChangeSet. */
-  async applyReviewed(receipt: Review) {
-    this.#active(); const binding = this.#reviews.get(receipt);
+  applyReviewed(receipt: Review): Promise<Applied>;
+  applyReviewed(receipt: ResolutionReview): Promise<ResolutionApplied>;
+  async applyReviewed(receipt: Review | ResolutionReview): Promise<Applied | ResolutionApplied> {
+    this.#active(); if (this.#resolution.owns(receipt)) return this.#resolution.applyReviewed(receipt);
+    const binding = this.#reviews.get(receipt as Review);
     return this.#apply({ kind: 'replace', snapshot: binding.snapshot }, binding.expectedRevision, this.#repositoryForEvent!, binding.endpointRevision);
   }
+
+  /** Review an explicit complete replacement independently against all conflict heads. @param snapshot Complete graph with authored versions. @param expectedHeads Unique complete heads. @returns Issued per-head review with one native union binding. */
+  async previewResolution(snapshot: Graph, expectedHeads: string[]): Promise<ResolutionReview> { this.#active(); return this.#resolution.preview(snapshot, expectedHeads); }
+  /** Publish a freshly reviewed all-head replacement using the strict native transaction boundary. @param snapshot Complete replacement. @param expectedHeads All current conflict heads. @returns Committed revision and per-head changes. */
+  async applyResolution(snapshot: Graph, expectedHeads: string[]): Promise<ResolutionApplied> { this.#active(); return this.#resolution.apply(snapshot, expectedHeads); }
 
   /** Revalidate and publish with manifest/native checks inside the selected owned transaction. @param {object} command Snapshot command. @param {string|null} expectedRevision Head. @param {Function} repositoryFor Strict/event factory. @param {string|null} expectedEndpointRevision User review binding or explicit direct-command mode. @returns {Promise<object>} Committed revision and ChangeSet. */
   async #apply(command: Draft['command'], expectedRevision: string|null, repositoryFor: RepositoryFactory, expectedEndpointRevision: string|null): Promise<Applied> {
@@ -281,6 +293,7 @@ export class RelationshipApplication {
   /** Stop commands and release cached native references; idempotent. @returns {void} */
   stop() {
     this.#stopped = true; this.invalidateAll();
+    this.#resolution.stop();
     this.#reviews.clear(); this.#lifecycle = null;
     this.#gateway = null; this.#repositoryFor = null; this.#repositoryForEvent = null; this.#now = null; this.#newID = null;
   }

@@ -116,6 +116,17 @@ export class LifecycleProjection {
   async #reviewPrepared(current: Graph, proposed: Graph) {
     this.cooperation.assertActive(); await this.cooperation.yieldToHost(); this.cooperation.assertActive();
     const observation = await this.observe([current, proposed]);
+    return this.#reviewObserved(current, proposed, observation);
+  }
+
+  /** Review one pair of private validated graphs against a previously captured complete native union. Capturing each pair keeps branch reports detached. @param before Private branch authority. @param after Private complete replacement. @param observation Shared native rows and union digest. @returns Ordinary per-branch review and eligibility references, without another native observation. */
+  async reviewObservedCaptured(before: Graph, after: Graph, observation: Awaited<ReturnType<LifecycleProjection['observe']>>) {
+    this.cooperation.assertActive();
+    return this.#reviewObserved(structuredClone(before), structuredClone(after), observation);
+  }
+
+  /** Compare privately owned captures without repeating capture on the ordinary review path. @param current Detached branch/current graph. @param proposed Detached replacement. @param observation Shared complete native facts. @returns Ordinary complete review and guarded eligibility references. */
+  async #reviewObserved(current: Graph, proposed: Graph, observation: Awaited<ReturnType<LifecycleProjection['observe']>>) {
     check(current.library === proposed.library, 'Cannot review graphs from different libraries');
     const assertions = entityDelta(current.assertions, proposed.assertions, 'id'); validateWrites(current, proposed, assertions, observation.rows);
     const previous = await inspectObservedAsync(current, observation.rows, this.cooperation);

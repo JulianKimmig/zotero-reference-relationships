@@ -44,7 +44,9 @@ export type WriteGuard = () => Promise<void>;
 /** Application-owned repository capabilities; persistence details remain storage-owned. */
 export interface RepositoryPort {
   read(): Promise<RepositoryState>;
+  readHead(head: string): Promise<{ head: string; snapshot: Graph }>;
   compareAndCommit(snapshot: Graph, expectedRevision: string | null): Promise<string>;
+  resolve(snapshot: Graph, expectedHeads: string[]): Promise<string>;
   invalidate(): void;
 }
 /** Strict and independent-event factories share the same application guard contract. */
@@ -65,3 +67,11 @@ export interface Review {
 }
 /** Successful publication preserves the reviewed whole-authority change set. */
 export interface Applied { revision: string; changeSet: ChangeSet }
+/** Explicit replacement reviewed independently against every complete conflict branch, with one union native binding. */
+export interface ResolutionReview {
+  expectedHeads: string[]; snapshot: Graph;
+  branches: { head: string; changeSet: ChangeSet; projection: Review['projection'] }[];
+  endpointRevision: string;
+}
+/** Committed all-head generation retains independent branch effects rather than inventing one baseline. */
+export interface ResolutionApplied { revision: string; branches: { head: string; changeSet: ChangeSet }[] }
