@@ -28,7 +28,7 @@ async function inputs(root: string): Promise<string[]> {
     else throw new Error(`Not a regular compiler input: ${relative}`);
   }
   for (const name of (await readdir(root)).sort()) {
-    if (['src', 'tests', 'locale', 'types'].includes(name) || /^(bootstrap\.ts|manifest\.json|package\.json)$/.test(name)) {
+    if (['src', 'tests', 'locale', 'types', 'LICENSE', 'THIRD-PARTY-NOTICES.md'].includes(name) || /^(bootstrap\.ts|manifest\.json|package\.json)$/.test(name)) {
       await visit(name);
     }
   }

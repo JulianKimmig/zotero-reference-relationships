@@ -97,7 +97,12 @@ Version `0.1.0` supports **Zotero 10.0.7 on Linux x86_64**. The
 Other Zotero versions and operating systems are outside the supported scope.
 
 Each library supports up to 1,000 explicit relationships, 64 relationship types
-and 64 rules, with up to 16 metadata fields per type. Preview rejects invalid
-or excessive work before publication; no partial result is saved. Persistent
+and 64 rules, with up to 16 metadata fields per type. Each validated graph is
+also limited to 1 MiB. Preview rejects invalid or excessive work before
+publication; no partial result is saved. Persistent
 sync conflicts require an explicit complete recovery review. Keep all competing
 data notes until recovery is finished; importing over a conflict is blocked.
+
+The plugin is distributed under the [MIT license](LICENSE).
+[Third-party notices](THIRD-PARTY-NOTICES.md) describe runtime references and
+development dependencies.

@@ -11,7 +11,7 @@ import { nativeJob } from './run.mts';
 import type { SyncConfig } from '../contracts.mts';
 import type { ReleaseRoundtripReport, ReleaseRestartReport } from '../../tests/sync-controller/release.sys.mts';
 
-const acceptedSHA256 = '9fb937627b7cfe3799bc702952504619d30ef384848b8619e9cc652049371c00';
+const acceptedSHA256 = '2757a9adbce2d260d3bcb32e0d94a1a8e83e1b7a0b41954636ab81d903bcc218';
 const addonID = 'reference-relationships@zotero-plugins.local';
 
 /** The only admitted CLI inputs identify two immutable artifacts and the actual supported native executable. */
@@ -39,7 +39,8 @@ async function artifact(xpi: string, version: string, files: number): Promise<Ar
     .trim().split('\n').filter(path => !path.endsWith('/'));
   assert.equal(entries.length, files, 'Frozen XPI production file count differs');
   assert.equal(new Set(entries).size, entries.length, 'Frozen XPI contains duplicate entries');
-  assert.ok(entries.every(path => path === 'manifest.json' || path === 'bootstrap.js' || /^(src|locale)\//.test(path)),
+  assert.ok(entries.every(path => path === 'manifest.json' || path === 'bootstrap.js' || path === 'LICENSE'
+    || path === 'THIRD-PARTY-NOTICES.md' || /^(src|locale)\//.test(path)),
     'Frozen XPI contains nonproduction entries');
   const manifest = JSON.parse(execFileSync('unzip', ['-p', xpi, 'manifest.json'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })) as {
     version?: string; applications?: { zotero?: { id?: string; strict_min_version?: string; strict_max_version?: string; update_url?: string } };
@@ -72,8 +73,8 @@ async function main(): Promise<void> {
   const args = parseReleaseArguments(process.argv.slice(2));
   assert.ok(process.platform === 'linux' && process.arch === 'x64', 'Release native acceptance is limited to Linux x86_64');
   await access(args.executable);
-  const current = await artifact(args.xpi, '0.1.0', 97), previous = await artifact(args.previousXPI, '0.0.9', 95);
-  assert.equal(current.sha256, acceptedSHA256, 'Current XPI must be the exact accepted 97-file Task 13 candidate');
+  const current = await artifact(args.xpi, '0.1.0', 99), previous = await artifact(args.previousXPI, '0.0.9', 95);
+  assert.equal(current.sha256, acceptedSHA256, 'Current XPI must be the exact frozen 99-file MIT release candidate');
   assert.notEqual(current.sha256, previous.sha256, 'Release artifacts must differ');
   const artifacts = [current, previous], root = await mkdtemp(join(tmpdir(), 'rr-release-'));
   const priorFixture = '95-file predecessor payload with manifest-only 0.0.9 test version; not a published older release';

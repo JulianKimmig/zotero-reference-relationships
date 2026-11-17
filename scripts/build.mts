@@ -24,7 +24,7 @@ async function collect(root: string, path: string): Promise<string[]> {
 
 /** Build a new XPI without overwriting artifacts. @param {string} root @param {string} output @returns {Promise<string>} absolute artifact path. */
 export async function buildProject(root: string, output: string): Promise<string> {
-  for (const path of ['manifest.json', 'bootstrap.ts', 'src', 'locale']) await collect(root, path);
+  for (const path of ['manifest.json', 'bootstrap.ts', 'src', 'locale', 'LICENSE', 'THIRD-PARTY-NOTICES.md']) await collect(root, path);
   const manifest = JSON.parse(await readFile(join(root, 'manifest.json'), 'utf8'));
   if (!manifest.applications?.zotero?.id || !manifest.version) throw new Error('Manifest needs Zotero id and version');
   if (!manifest.applications.zotero.update_url) throw new Error('Manifest needs applications.zotero.update_url');
@@ -33,7 +33,7 @@ export async function buildProject(root: string, output: string): Promise<string
   }
   const compiled = await compileProject(root);
   const files: string[] = [];
-  for (const path of ['manifest.json', 'bootstrap.js', 'src', 'locale']) files.push(...await collect(compiled, path));
+  for (const path of ['manifest.json', 'bootstrap.js', 'src', 'locale', 'LICENSE', 'THIRD-PARTY-NOTICES.md']) files.push(...await collect(compiled, path));
   const staging = await mkdtemp(join(tmpdir(), 'rr-zip-'));
   const artifact = resolve(output);
   try {

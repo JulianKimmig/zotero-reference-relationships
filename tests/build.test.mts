@@ -1,7 +1,7 @@
 /** Behavioral tests for the native-zip release package and its input boundary. */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -25,6 +25,8 @@ async function fixture(withLocale: boolean = true) {
     } },
   }));
   await writeFile(join(root, 'bootstrap.ts'), '/** Fixture bootstrap. */\nfunction startup(): number { return 1; }\n');
+  await writeFile(join(root, 'LICENSE'), 'MIT fixture license and copyright notice.\n');
+  await writeFile(join(root, 'THIRD-PARTY-NOTICES.md'), '# Fixture dependency notices\n');
   await writeFile(join(root, 'src', 'runtime.mts'), '/** Fixture runtime. */\nexport const value: number = 7;\n');
   await writeFile(join(root, 'src', 'preferences.xhtml'), '<html xmlns="http://www.w3.org/1999/xhtml"/>');
   if (withLocale) {
@@ -43,7 +45,10 @@ test('packages executable compiled code with only production files and unchanged
   assert.equal(await buildProject(root, output), output);
   const allEntries = execFileSync('unzip', ['-Z1', output], { encoding: 'utf8' }).trim().split('\n');
   const entries = allEntries.filter(name => !name.endsWith('/')).sort();
-  assert.deepEqual(entries, ['bootstrap.js', 'locale/en-US/reference-relationships.ftl', 'manifest.json', 'src/preferences.xhtml', 'src/runtime.mjs']);
+  assert.deepEqual(entries, ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'bootstrap.js', 'locale/en-US/reference-relationships.ftl', 'manifest.json', 'src/preferences.xhtml', 'src/runtime.mjs']);
+  for (const name of ['LICENSE', 'THIRD-PARTY-NOTICES.md']) {
+    assert.deepEqual(execFileSync('unzip', ['-p', output, name]), await readFile(join(root, name)));
+  }
   assert.ok(allEntries.includes('locale/') && allEntries.includes('locale/en-US/'), 'Native locale discovery requires directory entries');
   const runtime = execFileSync('unzip', ['-p', output, 'src/runtime.mjs'], { encoding: 'utf8' });
   assert.equal((await import(`data:text/javascript;base64,${Buffer.from(runtime).toString('base64')}`)).value, 7);
@@ -63,6 +68,26 @@ test('invalid TypeScript rejects the release without producing an archive', asyn
   const output = join(root, 'release.xpi');
   await assert.rejects(buildProject(root, output), /not assignable|TS2322/);
   await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('missing project license refuses an incomplete release', async () => {
+  const root = await fixture(), output = join(root, 'release.xpi');
+  await unlink(join(root, 'LICENSE'));
+  await assert.rejects(buildProject(root, output), /LICENSE|ENOENT/);
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('missing dependency notices refuses an incomplete release', async () => {
+  const root = await fixture(), output = join(root, 'release.xpi');
+  await unlink(join(root, 'THIRD-PARTY-NOTICES.md'));
+  await assert.rejects(buildProject(root, output), /THIRD-PARTY-NOTICES|ENOENT/);
+  await assert.rejects(readFile(output), /ENOENT/);
+});
+
+test('license symlinks cannot add files outside the production package', async () => {
+  const root = await fixture();
+  await unlink(join(root, 'LICENSE')); await symlink('/etc/hostname', join(root, 'LICENSE'));
+  await assert.rejects(buildProject(root, join(root, 'release.xpi')), /symbolic|symlink/i);
 });
 
 test('missing localization resources fails instead of shipping an unlabeled native section', async () => {
