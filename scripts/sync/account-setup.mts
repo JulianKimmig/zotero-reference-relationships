@@ -5,7 +5,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readDevelopmentCredentials } from './account-credentials.mts';
-import { authorizeBrowserAccount } from './account-browser-session.mts';
+import { authorizeBrowserAccount, BrowserAuthorizationError } from './account-browser-session.mts';
 import { openLoginBrowser } from './account-browser.mts';
 import { freshUIClient } from './fresh-ui.mts';
 import { prepareSignedSession } from './signed-session.mts';
@@ -90,5 +90,8 @@ async function main(): Promise<void> {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(() => { console.error('Dedicated account setup failed; inspect only the sanitized native result and setup progress.'); process.exitCode = 1; });
+  main().catch(error => {
+    console.error(error instanceof BrowserAuthorizationError ? error.message
+      : 'Dedicated account setup failed; inspect only the sanitized native result and setup progress.'); process.exitCode = 1;
+  });
 }
