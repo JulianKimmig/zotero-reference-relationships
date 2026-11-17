@@ -122,6 +122,30 @@ export async function inspectRuleRestart(job: ControllerJob, api: NativeAPI) {
   } finally { window.close(); }
 }
 
+/** Read personal authority through the frozen XPI's actual repository and native note transport, independently of addon/runtime presence. @param job Explicit candidate XPI and expected saved snapshot. @param api Actual native services, database, parser and WebCrypto. @returns Complete ready head/snapshot and exact expected-snapshot comparison; incomplete authority fails explicitly. */
+export async function inspectRuleStorageRestart(job: ControllerJob, api: NativeAPI) {
+  const xpi = requiredRuleEvidence(job.xpi, 'storage-restart.job.xpi');
+  const expected = requiredRuleEvidence(job.snapshot, 'storage-restart.job.snapshot');
+  const fileURI = api.Services.io.newFileURI(api.Zotero.File.pathToFile(xpi));
+  const handler = api.Services.io.getProtocolHandler('resource').QueryInterface(api.Components.interfaces.nsIResProtocolHandler);
+  handler.setSubstitution('rr-rule-storage-restart', api.Services.io.newURI(`jar:${fileURI.spec}!/`));
+  try {
+    const { GraphRepository } = api.ChromeUtils.importESModule('resource://rr-rule-storage-restart/src/storage/repository.mjs');
+    const { createNativeTransport } = api.ChromeUtils.importESModule('resource://rr-rule-storage-restart/src/storage/native-notes.mjs');
+    /** Hash actual canonical UTF-8 data with native WebCrypto. @param text Canonical input. @returns Lowercase SHA-256 digest. */
+    async function digest(text: string): Promise<string> {
+      const bytes = await api.crypto.subtle.digest('SHA-256', new api.TextEncoder().encode(text));
+      return Array.from(new Uint8Array(bytes), value => value.toString(16).padStart(2, '0')).join('');
+    }
+    const transport = createNativeTransport({ Zotero: api.Zotero, DOMParser: api.DOMParser, libraryID: api.Zotero.Libraries.userLibraryID });
+    check(transport.scope === 'self', 'Storage restart probe requires actual personal-library scope');
+    const repository = new GraphRepository({ transport, digest, now: () => new Date().toISOString() });
+    const authority = readyState(await repository.read());
+    return { standaloneNoAddonInstall: true, state: authority.state, head: authority.head, snapshot: authority.snapshot,
+      expectedSnapshotMatches: JSON.stringify(authority.snapshot) === JSON.stringify(expected) };
+  } finally { handler.setSubstitution('rr-rule-storage-restart', null); }
+}
+
 /** Require exact native head/snapshot to remain unchanged. @param {object} app Public application. @param {object} before Captured state. @returns {Promise<void>} */
 export async function sameAuthority(app: RelationshipApplication, before: RepositoryState) {
   check(JSON.stringify(await app.read('self')) === JSON.stringify(before), 'Canceled or invalid rule form changed authority');

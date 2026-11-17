@@ -85,7 +85,7 @@ export interface NativeServices {
   obs: { addObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void;
     removeObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void };
   env: { get(name: string): string };
-  io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string } };
+  io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string }; newFileURI(file: object): { spec: string } };
   prefs: { getStringPref(key: string): string }; startup: { eForceQuit: number; quit(flags: number): void };
   uuid: { generateUUID(): { toString(): string } }; scriptloader: { loadSubScript(uri: string, scope: object): void };
   wm: { getEnumerator(type: string | null): Iterable<TestWindow> }; console: { getMessageArray(): { message: string }[] };

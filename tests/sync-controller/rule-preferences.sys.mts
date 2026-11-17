@@ -7,7 +7,7 @@ import type { ControllerJob } from './job-contracts.mts';
 import type { NativeAPI } from './native-api.mts';
 import { check, until, selectPane, click, type, createThroughUI } from './ui-helpers.sys.mts';
 import { install, book, ref, applyOne, change } from './rules-fixtures.sys.mts';
-import { paneID, preferences, openRule, fillRule, previewRule, saveRule, cancelRule, toggleRule, storedRule, sameAuthority, requiredRuleEvidence, verifyRestartRules, inspectRuleRestart } from './rule-preferences-helpers.sys.mts';
+import { paneID, preferences, openRule, fillRule, previewRule, saveRule, cancelRule, toggleRule, storedRule, sameAuthority, requiredRuleEvidence, verifyRestartRules, inspectRuleRestart, inspectRuleStorageRestart } from './rule-preferences-helpers.sys.mts';
 import { rulePreferenceEdges } from './rule-preferences-edges.sys.mts';
 import { typedRulePreferences } from './rule-preferences-typed.sys.mts';
 
@@ -47,6 +47,7 @@ async function bulkReview(api: NativeAPI, review: HTMLElement) {
 
 /** Run native user journeys on installed production code; no application internals are mocked. @param {object} job Explicit phase. @param {object} api Native resources. @returns {Promise<object>} Evidence. */
 export async function rulePreferences(job: ControllerJob, api: NativeAPI) {
+  if (job.action === 'ruleui:inspect-storage-restart') return inspectRuleStorageRestart(job, api);
   if (job.action === 'ruleui:inspect-restart') return inspectRuleRestart(job, api);
   requiredRuleEvidence(job.xpi, 'job.xpi');
   const { Zotero } = api, main = await install(job, api), app = Zotero.ReferenceRelationships!.application;
