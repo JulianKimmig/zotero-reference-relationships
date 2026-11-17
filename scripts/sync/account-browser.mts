@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { ChildProcess } from 'node:child_process';
 import type { DevelopmentCredentials } from './account-credentials.mts';
 import type { LoginBrowser } from './account-browser-session.mts';
+import { createLoginPump } from './account-login-form.mts';
 import { errorCode } from '../errors.mts';
 
 /** Validate one untrusted WebDriver object without including its values in exceptions. @param value External JSON. @returns Object whose fields need checking. */
@@ -79,37 +80,6 @@ export async function openLoginBrowser(url: string, credentials: DevelopmentCred
     if (typeof started.sessionId !== 'string') throw new Error('Missing owned browser session'); session = started.sessionId;
     await request(`/session/${session}/timeouts`, { pageLoad: 30000, script: 10000 });
     await request(`/session/${session}/url`, { url });
-    let entered = false, submitted = false, notice = false;
-    /** Resolve current native browser elements without reading form values or page text. @param selector Owned login/approval selector. @returns Actual element identities. */
-    async function elements(selector: string): Promise<string[]> {
-      const result = await request(`/session/${session}/elements`, { using: 'css selector', value: selector });
-      if (!Array.isArray(result)) throw new Error('Invalid browser elements');
-      return result.map(value => { const id = object(value)['element-6066-11e4-a52e-4f735466cecf']; if (typeof id !== 'string') throw new Error(); return id; });
-    }
-    return { close,
-      /** Fill normal account fields once and click only enabled login/approval controls. Verification/MFA is completed by the user in the visible window. @returns Completion of this bounded UI observation/action. */
-      async pump(): Promise<void> {
-        const current = await request(`/session/${session}/url`, undefined, 'GET');
-        if (typeof current !== 'string' || new URL(current).origin !== 'https://www.zotero.org') throw new Error('Unexpected authentication origin');
-        const usernames = await elements('#username'), passwords = await elements('#password');
-        if (!entered && usernames.length === 1 && passwords.length === 1) {
-          await request(`/session/${session}/element/${usernames[0]}/value`, { text: credentials.username });
-          await request(`/session/${session}/element/${passwords[0]}/value`, { text: credentials.password }); entered = true;
-        }
-        const login = await elements('#login');
-        if (entered && !submitted && login.length === 1) {
-          if (await request(`/session/${session}/element/${login[0]}/enabled`, undefined, 'GET') === true) {
-            await request(`/session/${session}/element/${login[0]}/click`, {}); submitted = true;
-          } else if (!notice) { console.log('Complete Zotero verification in the opened browser; login fields are prefilled.'); notice = true; }
-        }
-        if (!passwords.length) for (const button of await elements('form button[type="submit"], form input[type="submit"]')) {
-          const label = await request(`/session/${session}/element/${button}/text`, undefined, 'GET');
-          if (typeof label === 'string' && /^(?:Authorize(?: Zotero)?|Allow|Approve|Continue)$/i.test(label.trim())
-            && await request(`/session/${session}/element/${button}/enabled`, undefined, 'GET') === true) {
-            await request(`/session/${session}/element/${button}/click`, {}); break;
-          }
-        }
-      },
-    };
+    return { close, pump: createLoginPump((path, body, method) => request(`/session/${session}${path}`, body, method), credentials) };
   } catch { await close(); throw new Error('Owned Zotero browser startup failed'); }
 }
