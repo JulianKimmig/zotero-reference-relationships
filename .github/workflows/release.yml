@@ -9,7 +9,7 @@ jobs:
   release:
     permissions:
       contents: write
-    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/release.yml@da9bb46555565bea8d634c5f41f03866e33fffa7
+    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/release.yml@cdbe9c5dd6b91b1db83d243b87475c301380bb6d
     with:
       helper_repository: JulianKimmig/zotero-plugin-ci
-      helper_commit: da9bb46555565bea8d634c5f41f03866e33fffa7
+      helper_commit: cdbe9c5dd6b91b1db83d243b87475c301380bb6d
