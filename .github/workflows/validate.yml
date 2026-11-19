@@ -11,7 +11,7 @@ permissions:
   contents: read
 jobs:
   validate:
-    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/validate.yml@502772144ccefea9254d3db22890cd75d7a0eda0
+    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/validate.yml@5317b2c43c136a8bfcfc90313992e45dd71c24aa
     with:
       helper_repository: JulianKimmig/zotero-plugin-ci
-      helper_commit: 502772144ccefea9254d3db22890cd75d7a0eda0
+      helper_commit: 5317b2c43c136a8bfcfc90313992e45dd71c24aa

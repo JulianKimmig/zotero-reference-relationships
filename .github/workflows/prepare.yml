@@ -9,10 +9,10 @@ permissions:
 jobs:
   prepare:
     if: github.event.pull_request.head.ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository
-    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/prepare.yml@502772144ccefea9254d3db22890cd75d7a0eda0
+    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/prepare.yml@5317b2c43c136a8bfcfc90313992e45dd71c24aa
     with:
       helper_repository: JulianKimmig/zotero-plugin-ci
-      helper_commit: 502772144ccefea9254d3db22890cd75d7a0eda0
+      helper_commit: 5317b2c43c136a8bfcfc90313992e45dd71c24aa
       pr_number: ${{ github.event.pull_request.number }}
     secrets:
       APP_ID: ${{ secrets.RELEASE_APP_ID }}
