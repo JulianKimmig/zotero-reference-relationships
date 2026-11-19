@@ -8,7 +8,7 @@ import { runInNewContext } from 'node:vm';
 const root = new URL(import.meta.url.endsWith('.mts') ? '../' : '../../', import.meta.url);
 const bootstrap = stripTypeScriptTypes(await readFile(new URL('bootstrap.ts', root), 'utf8'));
 const manifest = await readFile(new URL('manifest.json', root), 'utf8');
-const descriptor = { id: 'reference-relationships@zotero-plugins.local', version: '0.1.0',
+const descriptor = { id: 'reference-relationships@zotero-plugins.local', version: (JSON.parse(manifest) as { version: string }).version,
   rootURI: 'file:///tmp/rr-install-fixture/' };
 const resources = new Map(await Promise.all([
   ['src/runtime/lifecycle.js', 'src/runtime/lifecycle.ts'],
@@ -103,6 +103,16 @@ test('installation preserves an existing runtime without taking ownership', asyn
   await f.install(); f.unchanged();
 });
 
+test('installation validates the supplied release version rather than a fixed development version', async () => {
+  for (const version of ['0.2.0', '1.0.0']) {
+    const files = new Map(resources);
+    files.set('manifest.json', JSON.stringify({ ...JSON.parse(manifest), version }));
+    const f = fixture({ files });
+    await f.install({ ...descriptor, version }); f.unchanged();
+    await assert.rejects(f.install({ ...descriptor, version: '9.9.9' }), /identity\/version/);
+  }
+});
+
 const invalidMetadata: [string, unknown][] = [
   ['null descriptor', null], ['primitive descriptor', 'addon'], ['missing metadata', {}],
   ['wrong identity', { ...descriptor, id: 'another@plugin.local' }],
@@ -136,7 +146,7 @@ for (const version of ['10.0.6', '10.0.8', '10.0.7-beta.1', '11.0', '']) {
 
 test('rejects a supplied addon version that disagrees with its packaged manifest', async () => {
   const f = fixture();
-  await assert.rejects(f.install({ ...descriptor, version: '0.2.0' }), /manifest|version/);
+  await assert.rejects(f.install({ ...descriptor, version: `${descriptor.version}.different` }), /manifest|version/);
   assert.deepEqual(f.reads, [descriptor.rootURI + 'manifest.json']); f.unchanged();
 });
 
@@ -150,7 +160,7 @@ const invalidManifests: [string, string][] = [
   ['malformed JSON', '{'], ['null manifest', 'null'], ['missing application', '{}'],
   ['missing compatibility', JSON.stringify({ version: descriptor.version, applications: { zotero: {} } })],
   ['wrong identity', manifest.replace(descriptor.id, 'another@plugin.local')],
-  ['wrong addon version', manifest.replace('"version": "0.1.0"', '"version": "0.2.0"')],
+  ['wrong addon version', JSON.stringify({ ...JSON.parse(manifest), version: `${descriptor.version}.different` })],
   ['unsupported compatibility', manifest.replaceAll('10.0.7', '10.0.8')],
   ['broadened compatibility', manifest.replace('"strict_max_version": "10.0.7"', '"strict_max_version": "10.*"')],
 ];

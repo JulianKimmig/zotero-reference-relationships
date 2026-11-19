@@ -88,6 +88,14 @@ async function readAll() {
 
 /** Execute a single explicit test action through native APIs. @returns {Promise<object>} Sanitized action results. */
 async function execute() {
+  if (syncJob.action.startsWith('ci-release:')) {
+    const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
+    handler.setSubstitution('rr-ci-release-tests', Services.io.newURI(controllerRootURI));
+    try {
+      const { ciRelease } = (ChromeUtils.importESModule as typeof ChromeUtils.importESModule & ((uri: 'resource://rr-ci-release-tests/ci-release.sys.mjs') => typeof import('./ci-release.sys.mts')))('resource://rr-ci-release-tests/ci-release.sys.mjs');
+      return await ciRelease(syncJob as import('./ci-release.sys.mts').ReleaseJob, { Zotero, Services, ChromeUtils, Components, IOUtils, DOMParser, crypto, TextEncoder, synchronize });
+    } finally { handler.setSubstitution('rr-ci-release-tests', null); }
+  }
   if (syncJob.action.startsWith('release:')) {
     const handler = Services.io.getProtocolHandler('resource').QueryInterface(Components.interfaces.nsIResProtocolHandler);
     handler.setSubstitution('rr-release-tests', Services.io.newURI(controllerRootURI));

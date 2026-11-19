@@ -1,0 +1,15 @@
+# Release the exact main commit after validation.
+name: Release
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/release.yml@e14033cec76b2dbd726e37ad77b801dbfb305921
+    with:
+      helper_repository: JulianKimmig/zotero-plugin-ci
+      helper_commit: e14033cec76b2dbd726e37ad77b801dbfb305921
