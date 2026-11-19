@@ -22,6 +22,16 @@ export function requireBaseline(previous: string | undefined, baseline: string |
   assert.ok(previous || baseline === null, `Historical baseline ${baseline} exists; --previous is required`);
 }
 
+/** Require semantic upgrade evidence rather than equal-version reinstall or downgrade. @param previous Prior stable artifact version. @param current Candidate stable version. @returns Completion only for a strictly increasing version. */
+export function requireUpgrade(previous: string, current: string): void {
+  const parts = [previous, current].map(version => {
+    assert.match(version, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/, 'Upgrade requires stable semantic versions');
+    const values = version.split('.').map(Number); assert.ok(values.every(Number.isSafeInteger), 'Unsafe version component'); return values;
+  });
+  const index = parts[0].findIndex((value, position) => value !== parts[1][position]);
+  assert.ok(index >= 0 && parts[0][index] < parts[1][index], 'Upgrade requires a strictly older predecessor');
+}
+
 /** Require every native phase assertion and exact runtime version. @param report Native evidence. @param version Actual current archive version. @param flags Required phase proofs. @returns Completion only for exact successful evidence. */
 export function validatePhase(report: object, version: string, flags: readonly string[]): void {
   for (const flag of flags) assert.equal(Reflect.get(report, flag), true, `Missing native proof: ${flag}`);

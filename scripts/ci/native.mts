@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { freshUIClient } from '../sync/fresh-ui.mts';
 import { nativeJob } from '../sync/run.mts';
 import { artifact, stable } from './artifacts.mts';
-import { parseNativeArguments, requireBaseline, validatePhase } from './contract.mts';
+import { parseNativeArguments, requireBaseline, validatePhase, requireUpgrade } from './contract.mts';
 import type { SyncConfig } from '../contracts.mts';
 import type { ReleaseRoundtripReport, ReleaseRestartReport } from '../../tests/sync-controller/ci-release.sys.mts';
 const addonID = 'reference-relationships@zotero-plugins.local';
@@ -20,7 +20,10 @@ export async function main(): Promise<void> {
   await access(args.executable);
   requireBaseline(args.previousXPI, '0.1.0');
   const current = await artifact(args.xpi), previous = args.previousXPI ? await artifact(args.previousXPI) : null;
-  if (previous) assert.notEqual(current.sha256, previous?.sha256, 'Artifacts must differ');
+  if (previous) {
+    assert.notEqual(current.sha256, previous.sha256, 'Artifacts must differ');
+    requireUpgrade(previous.version, current.version);
+  }
   const artifacts = previous ? [current, previous] : [current], root = await mkdtemp(join(tmpdir(), 'rr-ci-native-'));
   const upgrade = previous ? 'required' : 'unavailable-no-historical-baseline';
   const completed: string[] = [], evidenceRoots: Record<string, string> = {};

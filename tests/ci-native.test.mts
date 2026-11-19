@@ -1,7 +1,7 @@
 /** CI admission and proof validation exercise public behavior without launching native processes. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseNativeArguments, requireBaseline, validatePhase } from '../scripts/ci/contract.mts';
+import { parseNativeArguments, requireBaseline, validatePhase, requireUpgrade } from '../scripts/ci/contract.mts';
 
 test('accepts dynamic artifact paths and optional predecessor', () => {
   assert.deepEqual(parseNativeArguments(['--xpi', '/new.xpi'], { ZOTERO_BIN: '/zotero' }),
@@ -21,6 +21,14 @@ test('only a plugin without a historical baseline may omit upgrade', () => {
   assert.throws(() => requireBaseline(undefined, '0.1.0'), /baseline/);
   assert.doesNotThrow(() => requireBaseline('/old', '0.1.0'));
   assert.doesNotThrow(() => requireBaseline(undefined, null));
+});
+
+test('native upgrade admission requires a strictly older stable predecessor', () => {
+  assert.doesNotThrow(() => requireUpgrade('0.2.9', '0.10.0'));
+  assert.doesNotThrow(() => requireUpgrade('0.1.0', '0.1.1'));
+  for (const [previous, current] of [['0.1.1', '0.1.1'], ['1.0.0', '0.9.9'], ['0.01.0', '0.2.0'], ['0.1.0-beta', '0.1.0']]) {
+    assert.throws(() => requireUpgrade(previous, current));
+  }
 });
 
 test('phase validation binds native version and every lifecycle flag', () => {
