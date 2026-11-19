@@ -3,6 +3,7 @@ import type { ControllerJob } from './job-contracts.mts';
 import type { NativeAPI } from './native-api.mts';
 import type { RepositoryState } from '../../src/storage/contracts.mts';
 import type { RuntimeBridge } from '../../src/runtime/contracts.mts';
+import { installedSHA256 } from './installed-artifact.sys.mts';
 import { found, present, readyState } from './evidence.sys.mts';
 import { check, until } from './ui-helpers.sys.mts';
 import { applyOne, book, ref, rule } from './rules-fixtures.sys.mts';
@@ -24,16 +25,18 @@ export interface ReleaseFixture {
   titles: { a: string; b: string };
 }
 /** Release-only inputs extend the existing public native job without widening unrelated dispatch contracts. */
-export interface ReleaseJob extends ControllerJob { previousXPI?: string; currentVersion: string; previousVersion?: string; releaseFixture?: ReleaseFixture }
+export interface ReleaseJob extends ControllerJob { previousXPI?: string; currentVersion: string; previousVersion?: string; currentSHA256?: string; previousSHA256?: string; releaseFixture?: ReleaseFixture }
 /** Proof emitted only after every in-process lifecycle and preservation assertion succeeds. */
 export interface ReleaseRoundtripReport {
-  releaseFixture: ReleaseFixture; previousVersion: string | null; currentVersion: string;
+  installedSHA256?: string; releaseFixture: ReleaseFixture; previousVersion: string | null; currentVersion: string;
   nativeUpgrade: boolean; upgrade: 'proved' | 'unavailable'; phases: string[]; nativeDisable: true; nativeReenable: true; nativeUninstall: true; nativeReinstall: true;
   permanentInstall: true; exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
 }
 /** Proof emitted only by an independent process reading the retained fixture. */
+export interface ReleaseSeedReport { installedSHA256?: string; releaseFixture: ReleaseFixture; previousVersion: string; permanentInstall: true; seeded: true }
+/** Native restart proof for the retained fixture. */
 export interface ReleaseRestartReport {
-  nativeRestart: true; permanentInstall: true; automaticStartup: true; currentVersion: string;
+  installedSHA256?: string; nativeRestart: true; permanentInstall: true; automaticStartup: true; currentVersion: string;
   exactAuthority: true; nativeDataPreserved: true; preferenceRegistrationCount: 1;
 }
 
@@ -42,8 +45,8 @@ function registrations(api: NativeAPI): number {
   return api.Zotero.PreferencePanes.pluginPanes.filter(pane => pane.id === paneID).length;
 }
 
-/** Persist the explicit frozen artifact using the installed 10.0.7 local-file API and await native completion/startup. @param api Native addon manager/platform. @param xpi Explicit immutable artifact. @param version Expected fixture or candidate version. @returns Actual persistent addon and distinct running application generation. */
-async function install(api: NativeAPI, xpi: string, version: string) {
+/** Persist the explicit frozen artifact using the installed 10.0.7 local-file API and await native completion/startup. @param api Native addon manager/platform. @param xpi Explicit immutable artifact. @param version Expected fixture or candidate version. @param expectedSHA256 Optional immutable binding for CI proof; legacy callers may omit it. @returns Actual persistent addon, installed digest when bound, and distinct running application generation. */
+async function install(api: NativeAPI, xpi: string, version: string, expectedSHA256?: string) {
   const { Zotero } = api, { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
   const installer = present(await AddonManager.getInstallForFile(Zotero.File.pathToFile(xpi)));
   /** Bound actual native installation without delaying successful completion or simulating install events. @returns Rejection only when native completion misses the deadline. */
@@ -58,7 +61,8 @@ async function install(api: NativeAPI, xpi: string, version: string) {
     const current = Zotero.ReferenceRelationships;
     return current?.state === 'running' && current.version === version && registrations(api) === 1 ? current : null;
   }, `release ${version} runtime and single preference registration`);
-  return { addon, runtime };
+  const digest = expectedSHA256 === undefined ? undefined : await installedSHA256(api, addon, expectedSHA256);
+  return { addon, runtime, installedSHA256: digest };
 }
 
 /** Wait for removal of actual runtime/registration ownership and inspect the retired generation. @param api Native platform. @param runtime Retained prior generation. @returns Completion only after singleton, window and preference ownership are released. */
@@ -150,13 +154,20 @@ async function roundtrip(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundt
     const phases: string[] = [];
     check(Boolean(job.previousXPI) === Boolean(job.previousVersion), 'CI predecessor version/path must be paired');
     phase.step = 'install-previous';
-    const previous = await install(api, job.previousXPI ?? xpi, job.previousVersion ?? job.currentVersion);
-    phases.push(job.previousXPI ? 'install-previous' : 'fresh-install');
-    const fixture = await seed(job, api, phase);
+    const splitHost = job.action === 'ci-release:migrate';
+    const previous = splitHost ? null : await install(api, job.previousXPI ?? xpi, job.previousVersion ?? job.currentVersion, job.previousXPI ? job.previousSHA256 : job.currentSHA256);
+    phases.push(splitHost ? 'previous-host-seeded' : job.previousXPI ? 'install-previous' : 'fresh-install');
+    if (splitHost) {
+      const { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
+      const predecessor = present(await AddonManager.getAddonByID(addonID));
+      check(predecessor.version === job.previousVersion, 'Migration profile lost its real predecessor installation');
+      if (job.previousSHA256 !== undefined) await installedSHA256(api, predecessor, job.previousSHA256);
+    }
+    const fixture = splitHost ? present(job.releaseFixture) : await seed(job, api, phase);
     phase.step = 'upgrade-install';
-    const current = job.previousXPI ? await install(api, xpi, job.currentVersion) : previous;
+    const current = job.previousXPI ? await install(api, xpi, job.currentVersion, job.currentSHA256) : present(previous);
     phase.step = 'upgrade-readback';
-    check(!job.previousXPI || (current.runtime !== previous.runtime && current.runtime.application !== previous.runtime.application
+    check(!previous || !job.previousXPI || (current.runtime !== previous.runtime && current.runtime.application !== previous.runtime.application
       && previous.runtime.state === 'stopped' && previous.runtime.windows.size === 0), 'Upgrade reused or retained the previous application generation');
     await retained(api, fixture);
     phases.push('seed', job.previousXPI ? 'upgrade' : 'upgrade-unavailable');
@@ -181,12 +192,12 @@ async function roundtrip(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundt
     await nativeData(api, fixture);
     phases.push('uninstall', 'retained-data-without-addon');
     phase.step = 'reinstall';
-    const reinstalled = await install(api, xpi, job.currentVersion);
+    const reinstalled = await install(api, xpi, job.currentVersion, job.currentSHA256);
     phase.step = 'reinstall-readback';
     check(reinstalled.runtime !== reenabled && reinstalled.runtime.application !== reenabled.application, 'Reinstall reused the uninstalled application');
     await retained(api, fixture);
     phases.push('reinstall');
-    return { releaseFixture: fixture, previousVersion: job.previousVersion ?? null, currentVersion: job.currentVersion,
+    return { installedSHA256: reinstalled.installedSHA256, releaseFixture: fixture, previousVersion: job.previousVersion ?? null, currentVersion: job.currentVersion,
       nativeUpgrade: Boolean(job.previousXPI), upgrade: job.previousXPI ? 'proved' : 'unavailable', phases,
       nativeDisable: true, nativeReenable: true, nativeUninstall: true, nativeReinstall: true,
       permanentInstall: true, exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
@@ -194,10 +205,17 @@ async function roundtrip(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundt
 }
 
 /** Run release-only behavioral checks on an anonymous initialized native client. Restart inspects automatic startup without an install call. @param job Explicit release action, frozen XPIs and optional prior-process fixture. @param api Real native resources; synchronization is never requested. @returns Actual persistent roundtrip or automatic restart proof. */
-export async function ciRelease(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundtripReport | ReleaseRestartReport> {
+export async function ciRelease(job: ReleaseJob, api: NativeAPI): Promise<ReleaseRoundtripReport | ReleaseRestartReport | ReleaseSeedReport> {
   check(typeof job.currentVersion === 'string' && job.currentVersion.length > 0, 'CI current artifact version required');
+  if (job.action === 'ci-release:seed') check(Boolean(job.previousXPI && job.previousVersion), 'CI seed requires predecessor path and version');
+  if (job.action === 'ci-release:migrate') check(Boolean(job.previousXPI && job.previousVersion && job.releaseFixture), 'CI migration requires predecessor and fixture');
   check(!api.Zotero.Users.getCurrentUserID(), 'Release acceptance requires an anonymous dedicated client');
-  if (job.action === 'ci-release:roundtrip') return roundtrip(job, api);
+  if (job.action === 'ci-release:seed') {
+    const previous = await install(api, present(job.previousXPI), present(job.previousVersion), job.previousSHA256);
+    const releaseFixture = await seed(job, api, { step: 'seed-initial-state' });
+    return { installedSHA256: previous.installedSHA256, releaseFixture, previousVersion: present(job.previousVersion), permanentInstall: true, seeded: true };
+  }
+  if (job.action === 'ci-release:roundtrip' || job.action === 'ci-release:migrate') return roundtrip(job, api);
   check(job.action === 'ci-release:restart', 'Unknown native release action');
   const fixture = present(job.releaseFixture);
   const { AddonManager } = api.ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
@@ -208,7 +226,8 @@ export async function ciRelease(job: ReleaseJob, api: NativeAPI): Promise<Releas
     const runtime = api.Zotero.ReferenceRelationships;
     return runtime?.state === 'running' && runtime.version === job.currentVersion && registrations(api) === 1;
   }, 'release automatic startup and single preference registration');
+  const digest = job.currentSHA256 === undefined ? undefined : await installedSHA256(api, addon, job.currentSHA256);
   await retained(api, fixture);
-  return { nativeRestart: true, permanentInstall: true, automaticStartup: true, currentVersion: job.currentVersion,
+  return { installedSHA256: digest, nativeRestart: true, permanentInstall: true, automaticStartup: true, currentVersion: job.currentVersion,
     exactAuthority: true, nativeDataPreserved: true, preferenceRegistrationCount: 1 };
 }

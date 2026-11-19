@@ -41,10 +41,20 @@ export interface TestWindow extends NativeWindow {
   Zotero_Tabs: { close(id: string): void };
   ZoteroPane: NativeWindow['ZoteroPane'] & { loaded: boolean; itemsView: NativeTree; collectionsView: NativeTree; buildItemContextMenu(): Promise<void>; getSelectedItems(): TestItem[] };
 }
+/** Actual local archive file resolved through Gecko nsIFileURL, never through input metadata. */
+export interface InstalledFile {
+  path: string; fileSize: number;
+  /** Test the native resolved filesystem kind. @returns Whether the path is a regular file. */
+  isFile(): boolean;
+  /** Inspect the native link flag. @returns Whether the path is a symbolic link. */
+  isSymlink(): boolean;
+}
 /** Actual Gecko addon instance, including asynchronous lifecycle changes. */
 export interface NativeAddon {
   id: string; version: string; isActive: boolean; updateURL: string; temporarilyInstalled: boolean;
   enable(): Promise<void>; disable(): Promise<void>; uninstall(): Promise<void>;
+  /** Resolve this installed addon's native resource root. @returns Actual packed archive or unpacked URI. */
+  getResourceURI(): { spec: string };
 }
 /** Real native addon manager module capabilities. */
 export interface AddonManagerModule {
@@ -85,11 +95,12 @@ export interface TestPlatform extends ZoteroPlatform {
 }
 /** Actual privileged service registry passed to test modules, with no credential access. */
 export interface NativeServices {
+  vc: { compare(left: string, right: string): number };
   profiler?: import('./profiler-contracts.mts').NativeProfiler;
   obs: { addObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void;
     removeObserver(observer: import('./accessibility-contracts.mts').AccessibilityObserver, topic: string): void };
   env: { get(name: string): string };
-  io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string }; newFileURI(file: object): { spec: string } };
+  io: { offline: boolean; getProtocolHandler(protocol: string): { QueryInterface(id: object): { setSubstitution(name: string, uri: { spec: string } | null): void } }; newURI(uri: string): { spec: string; QueryInterface(iid: object): { file: InstalledFile } }; newFileURI(file: object): { spec: string } };
   prefs: { getStringPref(key: string): string }; startup: { eForceQuit: number; quit(flags: number): void };
   uuid: { generateUUID(): { toString(): string } }; scriptloader: { loadSubScript(uri: string, scope: object): void };
   wm: { getEnumerator(type: string | null): Iterable<TestWindow> }; console: { getMessageArray(): { message: string }[] };

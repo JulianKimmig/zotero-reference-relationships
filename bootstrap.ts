@@ -6,7 +6,7 @@ var relationshipResource: string | undefined;
 /**
  * Validate installation without initializing runtime services, seeding authority or migrating notes.
  * @param addon Native descriptor supplied by Zotero for install, upgrade or downgrade.
- * @returns Completes after checking the pinned native version, packaged identity and startup resources.
+ * @returns Completes after checking native comparator compatibility and essential APIs, packaged identity and startup resources.
  */
 async function install(addon: { id: string; version: string; rootURI: string }): Promise<void> {
   if (!addon || typeof addon !== 'object' || addon.id !== 'reference-relationships@zotero-plugins.local') {
@@ -17,7 +17,14 @@ async function install(addon: { id: string; version: string; rootURI: string }):
     throw new TypeError('Invalid installed addon version metadata');
   }
   validateInstallRoot(rootURI);
-  if (Zotero.version !== '10.0.7') throw new Error('Installation requires Zotero 10.0.7');
+  if (typeof Zotero.version !== 'string' || !Zotero.version) throw new Error('Installation requires Zotero >=10.0.7 compatibility');
+  if (typeof Services.vc?.compare !== 'function') throw new Error('Missing native Mozilla version comparator');
+  if (typeof Zotero.getMainWindows !== 'function'
+    || typeof Zotero.ItemPaneManager?.registerSection !== 'function' || typeof Zotero.ItemPaneManager?.unregisterSection !== 'function'
+    || typeof Zotero.PreferencePanes?.register !== 'function' || typeof Zotero.PreferencePanes?.unregister !== 'function'
+    || typeof Zotero.Notifier?.registerObserver !== 'function' || typeof Zotero.Notifier?.unregisterObserver !== 'function') {
+    throw new Error('Missing essential native registration API');
+  }
   // This installed native File API reads file:/jar: channels without importing application modules.
   const reader = Zotero.File as typeof Zotero.File & { getResourceAsync(uri: string): Promise<string> };
   if (typeof reader?.getResourceAsync !== 'function') throw new Error('Missing native local-resource reader');
@@ -34,8 +41,12 @@ async function install(addon: { id: string; version: string; rootURI: string }):
   if (manifest.version !== version || compatibility.id !== id) {
     throw new Error('Packaged addon manifest identity/version does not match installation metadata');
   }
-  if (compatibility.strict_min_version !== Zotero.version || compatibility.strict_max_version !== Zotero.version) {
-    throw new Error('Packaged addon manifest compatibility must target Zotero 10.0.7 exactly');
+  const min = compatibility.strict_min_version, max = compatibility.strict_max_version;
+  if (typeof min !== 'string' || !/^\d+(?:\.\d+)*$/.test(min)
+    || typeof max !== 'string' || !/^\d+(?:\.\d+)*(?:\.\*)?$/.test(max)
+    || Services.vc.compare(min, max) > 0) throw new Error('Invalid packaged addon manifest compatibility bounds');
+  if (Services.vc.compare(Zotero.version, min) < 0 || Services.vc.compare(Zotero.version, max) > 0) {
+    throw new Error('Packaged addon manifest compatibility requires Zotero >=10.0.7 within its declared bounds');
   }
   for (const path of ['src/runtime/lifecycle.js', 'src/runtime/plugin.mjs', 'src/ui/preferences.xhtml',
     'locale/en-US/reference-relationships.ftl']) await readResource(path);

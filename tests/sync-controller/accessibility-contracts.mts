@@ -19,7 +19,7 @@ export interface NativeAccessibleEvent {
 /** Only the accessibility service class and interfaces are added to existing controller capabilities. */
 export interface NativeTestComponents {
   classes: { '@mozilla.org/accessibilityService;1': { getService(iid: object): NativeAccessibilityService } };
-  interfaces: { nsIResProtocolHandler: object; nsIAccessibilityService: object;
+  interfaces: { nsIFileURL: object; nsIResProtocolHandler: object; nsIAccessibilityService: object;
     nsIAccessibleEvent: { EVENT_ALERT: number; EVENT_FOCUS: number; EVENT_ANNOUNCEMENT: number };
     nsIAccessibleStates: { STATE_FOCUSED: number } };
 }

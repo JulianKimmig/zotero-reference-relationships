@@ -3,18 +3,36 @@ import assert from 'node:assert/strict';
 import { isAbsolute, resolve } from 'node:path';
 
 /** Explicit immutable inputs and supported executable. */
-export interface NativeArguments { xpi: string; previousXPI?: string; executable: string }
+export interface NativeArguments {
+  xpi: string; previousXPI?: string; executable: string; expectedVersion: string;
+  previousRuntime?: string; previousExpectedVersion?: string; result?: string;
+}
+/** Runtime selection supplied by the provisioning wrapper, never inferred from a filename. */
+interface Environment { ZOTERO_BIN?: string; ZOTERO_VERSION?: string; ZOTERO_PREVIOUS_VERSION?: string }
 
-/** Parse exact CLI grammar before reading files. @param args Ordered archive options. @param environment Explicit runtime selection. @returns Absolute validated paths. */
-export function parseNativeArguments(args: readonly string[], environment: { ZOTERO_BIN?: string } = process.env): NativeArguments {
-  assert.ok((args.length === 2 || args.length === 4) && args[0] === '--xpi'
-    && (args.length === 2 || args[2] === '--previous'), 'Usage: ci:native --xpi ABS [--previous ABS]');
-  assert.ok(isAbsolute(args[1]) && (args.length === 2 || isAbsolute(args[3])), 'Artifacts require absolute paths');
-  const xpi = resolve(args[1]);
-  const previousXPI = args.length === 4 ? resolve(args[3]) : undefined;
+/** Parse exact CLI pairs before filesystem access. @param args Archive, host and receipt options. @param environment Explicit host expectations. @returns Validated absolute paths and versions. */
+export function parseNativeArguments(args: readonly string[], environment: Environment = process.env): NativeArguments {
+  const usage = 'Usage: ci:native --xpi ABS [--previous ABS] [--previous-runtime ABS] [--result ABS]';
+  assert.ok(args.length >= 2 && args.length % 2 === 0 && args[0] === '--xpi', usage);
+  const values = new Map<string, string>();
+  for (let index = 0; index < args.length; index += 2) {
+    const key = args[index], value = args[index + 1];
+    assert.ok(['--xpi', '--previous', '--previous-runtime', '--result'].includes(key) && !values.has(key), usage);
+    assert.ok(value && isAbsolute(value), 'Artifacts, runtimes and receipts require absolute paths');
+    values.set(key, resolve(value));
+  }
+  const xpi = values.get('--xpi')!, previousXPI = values.get('--previous');
+  const previousRuntime = values.get('--previous-runtime'), result = values.get('--result');
   assert.notEqual(xpi, previousXPI, 'Artifacts must be distinct');
-  assert.ok(environment.ZOTERO_BIN && isAbsolute(environment.ZOTERO_BIN), 'Set absolute ZOTERO_BIN to Linux Zotero 10.0.7');
-  return { xpi, ...(previousXPI ? { previousXPI } : {}), executable: resolve(environment.ZOTERO_BIN) };
+  assert.ok(!result || (result !== xpi && result !== previousXPI), 'Receipt must be distinct from artifacts');
+  assert.ok(environment.ZOTERO_BIN && isAbsolute(environment.ZOTERO_BIN), 'Set absolute ZOTERO_BIN');
+  assert.match(environment.ZOTERO_VERSION ?? '', /^\d+\.\d+(?:\.\d+)?$/, 'Set resolved ZOTERO_VERSION');
+  assert.ok(!previousRuntime || previousXPI, '--previous-runtime requires --previous');
+  assert.ok(Boolean(previousRuntime) === Boolean(environment.ZOTERO_PREVIOUS_VERSION), 'Pair previous runtime with ZOTERO_PREVIOUS_VERSION');
+  if (previousRuntime) assert.match(environment.ZOTERO_PREVIOUS_VERSION!, /^\d+\.\d+(?:\.\d+)?$/);
+  return { xpi, executable: resolve(environment.ZOTERO_BIN), expectedVersion: environment.ZOTERO_VERSION!,
+    ...(previousXPI ? { previousXPI } : {}), ...(result ? { result } : {}),
+    ...(previousRuntime ? { previousRuntime, previousExpectedVersion: environment.ZOTERO_PREVIOUS_VERSION! } : {}) };
 }
 
 /** Enforce historical baseline policy. @param previous Explicit prior archive. @param baseline Known released baseline, null only for first-ever plugin. @returns Completion when upgrade evidence is available or legitimately unavailable. */
@@ -37,4 +55,10 @@ export function validatePhase(report: object, version: string, flags: readonly s
   for (const flag of flags) assert.equal(Reflect.get(report, flag), true, `Missing native proof: ${flag}`);
   assert.equal(Reflect.get(report, 'currentVersion'), version);
   assert.equal(Reflect.get(report, 'preferenceRegistrationCount'), 1);
+}
+
+/** Bind an observed installed archive digest to the immutable expected artifact. @param report Actual native phase report. @param expected Frozen artifact SHA-256. @returns Completion only for an exact installed-byte proof. */
+export function validateInstalledHash(report: object, expected: string): void {
+  assert.match(expected, /^[a-f0-9]{64}$/, 'Expected immutable SHA-256');
+  assert.equal(Reflect.get(report, 'installedSHA256'), expected, 'Missing or substituted installed archive SHA-256');
 }

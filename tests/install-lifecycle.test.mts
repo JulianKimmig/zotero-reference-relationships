@@ -27,7 +27,7 @@ type Install = (addon: unknown, reason?: number) => Promise<void>;
  * @returns Actual VM lifecycle hooks, read requests and forbidden side effects.
  */
 function fixture(options: { version?: string; rootURI?: string; files?: Map<string, string>;
-  singleton?: object; reader?: boolean } = {}) {
+  singleton?: object; reader?: boolean; comparator?: boolean; essential?: boolean } = {}) {
   const reads: string[] = [], effects: string[] = [];
   const files = options.files ?? resources, rootURI = options.rootURI ?? descriptor.rootURI;
   /** Reject source attempts to write authority or touch runtime APIs. @param operation Forbidden action. @returns Never. */
@@ -60,13 +60,25 @@ function fixture(options: { version?: string; rootURI?: string; files?: Map<stri
       return files.get(name)!;
     },
   };
-  const native: { version: string; File: typeof file; ReferenceRelationships?: object } = {
+  const native = {
     version: options.version ?? '10.0.7', File: guard(file, 'Zotero.File'),
+    getMainWindows: options.essential === false ? undefined : () => [],
+    ItemPaneManager: { registerSection() {}, unregisterSection() {} },
+    PreferencePanes: { register() {}, unregister() {} },
+    Notifier: { registerObserver() {}, unregisterObserver() {} },
+    ReferenceRelationships: options.singleton,
   };
-  if (options.singleton) native.ReferenceRelationships = options.singleton;
+  if (!options.singleton) Reflect.deleteProperty(native, 'ReferenceRelationships');
   const scope: { install?: Install; relationshipRuntime?: object; relationshipResource?: string;
     Zotero: typeof native; URL: typeof URL; Services: object; ChromeUtils: object; IOUtils: object } = {
-    Zotero: guard(native, 'Zotero'), URL, Services: guard({}, 'Services'),
+    Zotero: guard(native, 'Zotero'), URL, Services: guard({ vc: options.comparator === false ? undefined : {
+      /** Model only the external Mozilla comparator boundary for these host fixtures. */
+      compare(a: string, b: string): number {
+        const order = ['10.0.6', '10.0.7-beta.1', '10.0.7', '10.0.8', '10.9.1', '10.*', '11.0'];
+        assert.ok(order.includes(a) && order.includes(b), `Unexpected comparator input ${a}, ${b}`);
+        return Math.sign(order.indexOf(a) - order.indexOf(b));
+      },
+    } }, 'Services'),
     ChromeUtils: guard({}, 'ChromeUtils'), IOUtils: guard({}, 'IOUtils'),
   };
   runInNewContext(bootstrap, scope, { filename: 'bootstrap.ts' });
@@ -136,11 +148,11 @@ for (const [name, addon] of invalidMetadata) {
   });
 }
 
-for (const version of ['10.0.6', '10.0.8', '10.0.7-beta.1', '11.0', '']) {
-  test(`rejects unsupported native version ${JSON.stringify(version)} before resource access`, async () => {
+for (const version of ['10.0.6', '10.0.7-beta.1', '11.0', '']) {
+  test(`rejects unsupported native version ${JSON.stringify(version)} without runtime mutation`, async () => {
     const f = fixture({ version });
     await assert.rejects(f.install(), /Zotero.*10\.0\.7/);
-    assert.deepEqual(f.reads, []); f.unchanged();
+    f.unchanged();
   });
 }
 
@@ -162,7 +174,8 @@ const invalidManifests: [string, string][] = [
   ['wrong identity', manifest.replace(descriptor.id, 'another@plugin.local')],
   ['wrong addon version', JSON.stringify({ ...JSON.parse(manifest), version: `${descriptor.version}.different` })],
   ['unsupported compatibility', manifest.replaceAll('10.0.7', '10.0.8')],
-  ['broadened compatibility', manifest.replace('"strict_max_version": "10.0.7"', '"strict_max_version": "10.*"')],
+  ['reversed bounds', manifest.replace('"strict_min_version": "10.0.7"', '"strict_min_version": "11.0"')],
+  ['missing maximum', manifest.replace('"strict_max_version": "10.*",', '')],
 ];
 for (const [name, contents] of invalidManifests) {
   test(`rejects ${name} without initializing runtime or authority`, async () => {
@@ -185,3 +198,18 @@ for (const resource of resources.keys()) {
     await assert.rejects(f.install(), /resource|JSON/); f.unchanged();
   });
 }
+
+for (const version of ['10.0.7', '10.0.8', '10.9.1']) {
+  test(`accepts native comparator admitted runtime ${version}`, async () => {
+    const f = fixture({ version }); await f.install(); f.unchanged();
+  });
+}
+test('requires native comparator and essential registration APIs', async () => {
+  await assert.rejects(fixture({ comparator: false }).install(), /comparator/);
+  await assert.rejects(fixture({ essential: false }).install(), /essential|API/);
+});
+test('uses the artifact own exact bounds for a historical manifest', async () => {
+  const files = new Map(resources); files.set('manifest.json', manifest.replace('10.*', '10.0.7'));
+  await fixture({ files }).install();
+  await assert.rejects(fixture({ files, version: '10.0.8' }).install(), /compatibility/);
+});
