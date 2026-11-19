@@ -2,13 +2,16 @@
 name: Validate
 on:
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 1'
   push:
     branches: [develop]
 permissions:
   contents: read
 jobs:
   validate:
-    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/validate.yml@da9bb46555565bea8d634c5f41f03866e33fffa7
+    uses: JulianKimmig/zotero-plugin-ci/.github/workflows/validate.yml@502772144ccefea9254d3db22890cd75d7a0eda0
     with:
       helper_repository: JulianKimmig/zotero-plugin-ci
-      helper_commit: da9bb46555565bea8d634c5f41f03866e33fffa7
+      helper_commit: 502772144ccefea9254d3db22890cd75d7a0eda0
