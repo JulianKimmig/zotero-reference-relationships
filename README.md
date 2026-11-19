@@ -105,9 +105,10 @@ The feed becomes available with the first automated release. Existing local
 new feed; subsequent published updates are automatic. The legacy raw-main
 [updates.json](updates.json) remains empty.
 
-Version `0.1.1` supports **Zotero 10.0.7 on Linux x86_64**. The
-[manifest](manifest.json) restricts the application version to `10.0.7`.
-Other Zotero versions and operating systems are outside the supported scope.
+Reference Relationships supports stable **Zotero 10.0.7 through 10.x** on
+**Linux x86_64, Windows x64 and macOS Intel**. The [manifest](manifest.json)
+declares this version range. Older published `v0.1.1` and `v0.1.2` XPIs restrict
+installation to Zotero `10.0.7`; use a newer release for the broader range.
 
 Each library supports up to 1,000 explicit relationships, 64 relationship types
 and 64 rules, with up to 16 metadata fields per type. Each validated graph is
