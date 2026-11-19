@@ -31,5 +31,8 @@
     "linux-x64",
     "windows-x64",
     "macos-x64"
+  ],
+  "nativeTools": [
+    ".build"
   ]
 }
