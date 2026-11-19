@@ -99,9 +99,13 @@ data** within its Zotero library. Disable or uninstall retains these notes and
 JSON backups. Ordinary Zotero translator exports are separate from this plugin's
 JSON backup format.
 
-The [published update manifest](https://raw.githubusercontent.com/JulianKimmig/zotero-reference-relationships/main/updates.json) currently contains no releases. The local [updates.json](updates.json) is its source. No automatic upgrade is available yet.
+Published releases use the [GitHub release update feed](https://github.com/JulianKimmig/zotero-reference-relationships/releases/latest/download/updates.json).
+The feed becomes available with the first automated release. Existing local
+`0.1.0` installations need one manual installation of that release to adopt the
+new feed; subsequent published updates are automatic. The legacy raw-main
+[updates.json](updates.json) remains empty.
 
-Version `0.1.0` supports **Zotero 10.0.7 on Linux x86_64**. The
+Version `0.1.1` supports **Zotero 10.0.7 on Linux x86_64**. The
 [manifest](manifest.json) restricts the application version to `10.0.7`.
 Other Zotero versions and operating systems are outside the supported scope.
 
